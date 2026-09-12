@@ -29,24 +29,16 @@ _PLATFORM_FIXES = {
         "hardcoded_secret": "Remove the secret in {file}. In Supabase/Lovable, configure this secret in Supabase Project Settings > Vault/Config or your project environment variables, referencing it on the backend without exposing it to the client.",
         "exposed_file": "Ensure {file} is added to .gitignore and configure your deploy static hosting to prevent serving configuration files publicly.",
         "cors_misconfig": "Restrict Supabase client and edge function CORS configurations to your production domain rather than allowing '*'.",
-        "static_analysis": "Review and resolve the code quality or security issue flagged in {file}: {label}.",
-        "missing_header": "Configure custom headers in your Supabase edge functions or hosting configuration to include {label}.",
     },
     "replit": {
-        "missing_access_control": "Add authentication checks and access control validation before processing operations for table '{table}'.",
         "hardcoded_secret": "Remove the hardcoded secret from {file}. In Replit, open the Secrets pane (Tools > Secrets) and add this key-value pair, then access it using standard environment variable lookups (e.g. process.env or os.environ).",
         "exposed_file": "Remove {file} from public serving. Ensure hidden/configuration files are not placed in public folders or exposed via the Replit webview.",
         "cors_misconfig": "Update your server configuration in Replit to restrict CORS origins to your Replit deployment domain.",
-        "static_analysis": "Review and resolve the code quality or security issue flagged in {file}: {label}.",
-        "missing_header": "Add the {label} response header in your Replit server configuration.",
     },
     "bolt_v0": {
         "hardcoded_secret": "Move the secret in {file} to your .env.local file. Note that secrets should not use NEXT_PUBLIC_ or VITE_ prefixes unless they are strictly public keys intended for client-side consumption.",
         "missing_access_control": "Protect server actions or API endpoints touching {table} with session verification and restrict database access control.",
-        "exposed_file": "Ensure {file} is added to .gitignore and not bundled in public static assets.",
         "cors_misconfig": "Update your Next.js or Vite server/route middleware CORS configuration to allow only your production origin.",
-        "static_analysis": "Review and resolve the code quality or security issue flagged in {file}: {label}.",
-        "missing_header": "Add the {label} response header to your Next.js headers config or Vite server response headers.",
     },
 }
 
