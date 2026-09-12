@@ -63,7 +63,7 @@ Return ONLY the prompt string to give to the vibe-coding tool. Do not wrap in ma
 
         client = genai.Client(api_key=api_key)
         response = client.models.generate_content(
-            model="gemini-3.6-flash",
+            model="gemini-3.8-flash",
             contents=prompt,
         )
         text = response.text.strip()
