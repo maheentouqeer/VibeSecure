@@ -6,8 +6,13 @@ CONTRACT — do not change without telling the team:
 """
 
 import json
+import logging
 import os
 from typing import Any
+
+logger = logging.getLogger(__name__)
+
+MODELS = ("gemini-2.5-flash", "gemini-2.0-flash")
 
 _TEMPLATES = {
     "hardcoded_secret": (
@@ -46,10 +51,12 @@ def _fallback_explain(finding: dict[str, Any]) -> dict[str, str]:
 
 def explain(finding: dict) -> dict:
     """Uses Gemini to generate plain-language explanations tailored to the specific finding.
+    Cascades through models before falling back to pre-defined explanation templates.
     Keeps the two contract keys: what_it_means, why_it_matters.
     """
     api_key = os.environ.get("GEMINI_API_KEY")
     if not api_key:
+        logger.debug("GEMINI_API_KEY not set; using fallback explainer.")
         return _fallback_explain(finding)
 
     prompt = f"""You are a helpful security educator explaining a vulnerability to an application developer.
@@ -65,28 +72,33 @@ Do not include markdown code formatting or surrounding explanations, output only
 
     try:
         from google import genai
+        from google.genai import types
 
         client = genai.Client(api_key=api_key)
-        response = client.models.generate_content(
-            model="gemini-3.8-flash",
-            contents=prompt,
-        )
-        text = response.text.strip()
-        if text.startswith("```"):
-            lines = text.splitlines()
-            if lines[0].startswith("```"):
-                lines = lines[1:]
-            if lines and lines[-1].startswith("```"):
-                lines = lines[:-1]
-            text = "\n".join(lines).strip()
+        for model in MODELS:
+            try:
+                config = types.GenerateContentConfig(
+                    response_mime_type="application/json",
+                )
+                response = client.models.generate_content(
+                    model=model,
+                    contents=prompt,
+                    config=config,
+                )
+                text = (response.text or "").strip()
+                if text.startswith("```"):
+                    lines = text.splitlines()
+                    if lines[0].startswith("```"):
+                        lines = lines[1:]
+                    if lines and lines[-1].startswith("```"):
+                        lines = lines[:-1]
+                    text = "\n".join(lines).strip()
 
-        data = json.loads(text)
-        if isinstance(data, dict) and "what_it_means" in data and "why_it_matters" in data:
-            return {
-                "what_it_means": str(data["what_it_means"]),
-                "why_it_matters": str(data["why_it_matters"]),
-            }
-    except Exception:
-        pass
-
-    return _fallback_explain(finding)
+                data = json.loads(text)
+                if isinstance(data, dict) and "what_it_means" in data and "why_it_matters" in data:
+                    return {
+                        "what_it_means": str(data["what_it_means"]),
+                        "why_it_matters": str(data["why_it_matters"]),
+                    }
+                logger.warning(
+                    "Model

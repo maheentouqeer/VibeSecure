@@ -11,6 +11,8 @@ import json
 import os
 from typing import Any
 
+MODELS = ("gemini-3.8-flash", "gemini-2.5-flash")
+
 _VALID_SEVERITIES = {"critical", "high", "medium", "low"}
 
 _SEVERITY_MAP = {
@@ -47,7 +49,7 @@ def _fallback_triage(raw_findings: list[dict[str, Any]]) -> list[dict[str, Any]]
 
 def triage(raw_findings: list[dict]) -> list[dict]:
     """Uses Gemini to deduplicate and rank raw findings by real-world security severity.
-    Falls back gracefully if the API key is not configured or an error occurs.
+    Cascades through models before falling back gracefully if errors occur or key is unset.
     """
     if not raw_findings:
         return []
@@ -80,37 +82,41 @@ Do not output markdown code fences or any extra commentary, only valid JSON.
         from google import genai
 
         client = genai.Client(api_key=api_key)
-        response = client.models.generate_content(
-            model="gemini-3.8-flash",
-            contents=prompt,
-        )
-        text = response.text.strip()
-        if text.startswith("```"):
-            lines = text.splitlines()
-            if lines[0].startswith("```"):
-                lines = lines[1:]
-            if lines and lines[-1].startswith("```"):
-                lines = lines[:-1]
-            text = "\n".join(lines).strip()
+        for model in MODELS:
+            try:
+                response = client.models.generate_content(
+                    model=model,
+                    contents=prompt,
+                )
+                text = response.text.strip()
+                if text.startswith("```"):
+                    lines = text.splitlines()
+                    if lines[0].startswith("```"):
+                        lines = lines[1:]
+                    if lines and lines[-1].startswith("```"):
+                        lines = lines[:-1]
+                    text = "\n".join(lines).strip()
 
-        parsed = json.loads(text)
-        if isinstance(parsed, list):
-            sanitized = []
-            for i, item in enumerate(parsed):
-                if not isinstance(item, dict):
-                    continue
-                sev = str(item.get("severity", "medium")).lower()
-                if sev not in _VALID_SEVERITIES:
-                    sev = "medium"
-                sanitized.append({
-                    "id": str(item.get("id", f"finding_{i}")),
-                    "category": str(item.get("category", "unknown")),
-                    "label": str(item.get("label", "Unlabeled finding")),
-                    "file": str(item.get("file", "")),
-                    "severity": sev,
-                })
-            if sanitized:
-                return sanitized
+                parsed = json.loads(text)
+                if isinstance(parsed, list):
+                    sanitized = []
+                    for i, item in enumerate(parsed):
+                        if not isinstance(item, dict):
+                            continue
+                        sev = str(item.get("severity", "medium")).lower()
+                        if sev not in _VALID_SEVERITIES:
+                            sev = "medium"
+                        sanitized.append({
+                            "id": str(item.get("id", f"finding_{i}")),
+                            "category": str(item.get("category", "unknown")),
+                            "label": str(item.get("label", "Unlabeled finding")),
+                            "file": str(item.get("file", "")),
+                            "severity": sev,
+                        })
+                    if sanitized:
+                        return sanitized
+            except Exception:
+                continue
     except Exception:
         pass
 

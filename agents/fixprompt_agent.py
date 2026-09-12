@@ -9,33 +9,71 @@ import json
 import os
 from typing import Any
 
+MODELS = ("gemini-3.8-flash", "gemini-2.5-flash")
+
 _GENERIC_FIXES = {
     "hardcoded_secret": "Move the secret found in {file} out of the code and into an environment variable or your platform's secrets manager, then remove it from the source file.",
     "static_analysis": "Review and fix the issue flagged in {file}: {label}.",
-    "missing_access_control": "Enable Row Level Security on the affected table and add a policy restricting access to the record's owner.",
+    "missing_access_control": "Enable Row Level Security on the affected table and add an access control policy restricting access to authorized users.",
     "exposed_file": "Update your hosting/deploy configuration so {file} is not publicly served.",
     "missing_header": "Add the {label} response header to your app's server configuration.",
     "cors_misconfig": "Restrict CORS to your app's actual domain instead of allowing all origins (*).",
 }
 
+_PLATFORM_FIXES = {
+    "lovable_supabase": {
+        "missing_access_control": "In your Supabase migration for table '{table}', add: ALTER TABLE {table} ENABLE ROW LEVEL SECURITY; and define policies restricting row operations using auth.uid().",
+        "hardcoded_secret": "Remove the secret in {file}. In Supabase/Lovable, configure this secret in Supabase Project Settings > Vault/Config or your project environment variables, referencing it on the backend without exposing it to the client.",
+        "exposed_file": "Ensure {file} is added to .gitignore and configure your deploy static hosting to prevent serving configuration files publicly.",
+        "cors_misconfig": "Restrict Supabase client and edge function CORS configurations to your production domain rather than allowing '*'.",
+    },
+    "replit": {
+        "hardcoded_secret": "Remove the hardcoded secret from {file}. In Replit, open the Secrets pane (Tools > Secrets) and add this key-value pair, then access it using standard environment variable lookups (e.g. process.env or os.environ).",
+        "exposed_file": "Remove {file} from public serving. Ensure hidden/configuration files are not placed in public folders or exposed via the Replit webview.",
+        "cors_misconfig": "Update your server configuration in Replit to restrict CORS origins to your Replit deployment domain.",
+    },
+    "bolt_v0": {
+        "hardcoded_secret": "Move the secret in {file} to your .env.local file. Note that secrets should not use NEXT_PUBLIC_ or VITE_ prefixes unless they are strictly public keys intended for client-side consumption.",
+        "missing_access_control": "Protect server actions or API endpoints touching {table} with session verification and restrict database access control.",
+        "cors_misconfig": "Update your Next.js or Vite server/route middleware CORS configuration to allow only your production origin.",
+    },
+}
+
 _DEFAULT = "Investigate and fix: {label} in {file}."
 
 
+def _normalize_platform(platform: str) -> str:
+    p = platform.lower()
+    if "supabase" in p or "lovable" in p:
+        return "lovable_supabase"
+    if "replit" in p:
+        return "replit"
+    if "bolt" in p or "v0" in p:
+        return "bolt_v0"
+    return "generic"
+
+
 def _fallback_fix_prompt(finding: dict[str, Any], platform: str) -> str:
-    template = _GENERIC_FIXES.get(finding.get("category", ""), _DEFAULT)
+    norm_platform = _normalize_platform(platform)
+    category = finding.get("category", "")
+    table = finding.get("table", "the affected table")
+    file_path = finding.get("file", "the affected file")
+    label = finding.get("label", "this issue")
+
+    platform_templates = _PLATFORM_FIXES.get(norm_platform, {})
+    template = platform_templates.get(category) or _GENERIC_FIXES.get(category, _DEFAULT)
+
     return template.format(
-        file=finding.get("file", "the affected file"),
-        label=finding.get("label", "this issue"),
+        file=file_path,
+        label=label,
+        table=table,
     )
 
 
 def generate_fix_prompt(finding: dict, platform: str) -> str:
     """Uses Gemini to generate a tailored fix prompt based on the finding and target platform.
-    Examples of platform-specific conventions:
-    - Lovable/Supabase: RLS policies, supabase secrets/vault, client-side safety
-    - Replit: Replit Secrets pane, replit configuration
-    - Bolt/v0: Next.js/Vite environment variable conventions
-    - generic: standard environment variables and remediation patterns
+    Cascades through models (gemini-3.8-flash -> gemini-2.5-flash) and falls back to
+    platform-aware deterministic templates if LLM calls fail or API key is absent.
     """
     api_key = os.environ.get("GEMINI_API_KEY")
     if not api_key:
@@ -62,13 +100,17 @@ Return ONLY the prompt string to give to the vibe-coding tool. Do not wrap in ma
         from google import genai
 
         client = genai.Client(api_key=api_key)
-        response = client.models.generate_content(
-            model="gemini-3.8-flash",
-            contents=prompt,
-        )
-        text = response.text.strip()
-        if text:
-            return text
+        for model in MODELS:
+            try:
+                response = client.models.generate_content(
+                    model=model,
+                    contents=prompt,
+                )
+                text = response.text.strip()
+                if text:
+                    return text
+            except Exception:
+                continue
     except Exception:
         pass
 
