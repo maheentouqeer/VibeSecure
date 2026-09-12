@@ -22,6 +22,10 @@ load_dotenv()
 
 DATABASE_URL = os.getenv("DATABASE_URL", "sqlite:///./secure_vibecode.db")
 
+# Normalize legacy Heroku/Render postgres:// scheme to postgresql+psycopg2://
+if DATABASE_URL.startswith("postgres://"):
+    DATABASE_URL = DATABASE_URL.replace("postgres://", "postgresql+psycopg2://", 1)
+
 # SQLite needs this connect_arg for use with FastAPI's threaded TestClient;
 # Postgres ignores it entirely so it's safe to always pass.
 connect_args = {"check_same_thread": False} if DATABASE_URL.startswith("sqlite") else {}
