@@ -37,12 +37,12 @@ TEST_SET: list[TestRepoSpec] = [
             {
                 "category": "hardcoded_secret",
                 "file": "src/lib/auth.ts",
-                "label_contains": "Entropy",
+                "label_contains": "High Entropy Secret",
             },
             {
-                "category": "missing_rls",
-                "file": "supabase/migrations/20240101_init.sql",
-                "label_contains": None,
+                "category": "missing_access_control",
+                "file": "supabase migrations",
+                "label_contains": "Row-Level Security not enabled",
             },
         ],
     },
@@ -58,7 +58,7 @@ TEST_SET: list[TestRepoSpec] = [
                 "label_contains": "Stripe Secret Key",
             },
             {
-                "category": "cors_misconfiguration",
+                "category": "cors_misconfig",
                 "file": "server.js",
                 "label_contains": None,
             },

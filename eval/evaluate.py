@@ -1,7 +1,8 @@
 """Evaluation harness to run scanners against the benchmark test set and compute metrics."""
 
-from pathlib import Path
+import re
 import tempfile
+from pathlib import Path
 from typing import Any, Dict, List
 
 import pandas as pd
@@ -12,15 +13,34 @@ from scanner.secrets_scanner import scan_secrets
 from scanner.supabase_rls_checker import check_rls
 
 
+def _check_static_cors(repo_dir: Path) -> list[dict]:
+    """Fallback static check for CORS misconfigurations in source files during evaluation."""
+    findings = []
+    cors_pattern = re.compile(r"cors\s*\(\s*\{\s*origin\s*:\s*['\"]\*['\"]", re.IGNORECASE)
+    for file in repo_dir.rglob("*.js"):
+        try:
+            content = file.read_text(errors="ignore")
+            if cors_pattern.search(content):
+                findings.append({
+                    "category": "cors_misconfig",
+                    "label": "CORS allows any origin (*)",
+                    "file": str(file.relative_to(repo_dir)),
+                    "raw_severity": "high",
+                })
+        except Exception:
+            continue
+    return findings
+
+
 def match_finding(expected: dict, actual: dict) -> bool:
     """Check if an actual scanner finding matches an expected ground truth finding."""
     cat_match = expected["category"].lower() in actual.get("category", "").lower()
     file_match = expected["file"] in actual.get("file", "")
-    
+
     if "label_contains" in expected and expected["label_contains"]:
         label_match = expected["label_contains"].lower() in actual.get("label", "").lower()
         return cat_match and file_match and label_match
-        
+
     return cat_match and file_match
 
 
@@ -29,7 +49,8 @@ def evaluate_repo(spec: TestRepoSpec, repo_dir: Path) -> dict[str, Any]:
     actual_findings: list[dict] = []
     actual_findings.extend(scan_secrets(repo_dir))
     actual_findings.extend(check_rls(repo_dir))
-    
+    actual_findings.extend(_check_static_cors(repo_dir))
+
     try:
         actual_findings.extend(run_semgrep(repo_dir))
     except Exception:
