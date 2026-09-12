@@ -23,6 +23,8 @@ import {
   AlertTriangle,
 } from "lucide-react";
 
+import { createScan, rescanScan, ApiError, type ApiScan, type ApiFinding } from "@/lib/api";
+
 // ---------------------------------------------------------------------------
 // Types
 // ---------------------------------------------------------------------------
@@ -48,6 +50,43 @@ interface ScanResult {
   date: string; // ISO
   status: ScanStatus;
   findings: Finding[];
+}
+
+// ---------------------------------------------------------------------------
+// Mapping: backend shape (snake_case, id-based status) -> frontend shape
+// ---------------------------------------------------------------------------
+function mapPlatform(apiPlatform: string): Platform {
+  if (apiPlatform === "lovable_supabase") return "lovable/supabase";
+  if (apiPlatform === "bolt_v0") return "bolt";
+  if (apiPlatform === "replit") return "replit";
+  return "generic";
+}
+
+function mapFinding(f: ApiFinding): Finding {
+  return {
+    id: f.id,
+    severity: f.severity,
+    title: f.label,
+    whatItMeans: f.what_it_means,
+    whyItMatters: f.why_it_matters,
+    fixPrompt: f.fix_prompt,
+    resolved: f.status === "resolved",
+  };
+}
+
+function mapScan(s: ApiScan): ScanResult {
+  const findings = s.findings.map(mapFinding);
+  const openCriticalHigh = findings.filter(
+    (f) => !f.resolved && (f.severity === "critical" || f.severity === "high")
+  ).length;
+  return {
+    id: s.id,
+    repoUrl: s.target,
+    platform: mapPlatform(s.platform),
+    date: s.created_at,
+    status: openCriticalHigh === 0 ? "pass" : "fail",
+    findings,
+  };
 }
 
 // ---------------------------------------------------------------------------
@@ -77,49 +116,7 @@ function detectPlatform(url: string): Platform {
   return "generic";
 }
 
-function generateFindings(): Finding[] {
-  const base: Omit<Finding, "id" | "resolved">[] = [
-    {
-      severity: "critical",
-      title: "Exposed Supabase service role key",
-      whatItMeans:
-        "The service_role API key, which bypasses all row-level security, is hardcoded in client-side source.",
-      whyItMatters:
-        "Anyone who views your bundled JavaScript can extract this key and gain full read/write access to your database, bypassing every permission rule you've set up.",
-      fixPrompt:
-        "Move SUPABASE_SERVICE_ROLE_KEY to a server-only environment variable and remove it from any file bundled into the client. Use the anon key with RLS policies for client-side calls instead.",
-    },
-    {
-      severity: "high",
-      title: "Missing Row Level Security on `orders` table",
-      whatItMeans: "Row Level Security is disabled on a table that stores user order data.",
-      whyItMatters:
-        "Without RLS, any authenticated (or even anonymous) user can query or modify every row in the table, exposing other customers' data.",
-      fixPrompt:
-        "Enable Row Level Security on the orders table and add a policy restricting access to rows where user_id = auth.uid().",
-    },
-    {
-      severity: "medium",
-      title: "Unvalidated redirect in auth callback",
-      whatItMeans:
-        "The post-login redirect URL is read directly from a query parameter without validation.",
-      whyItMatters:
-        "Attackers can craft links that redirect authenticated users to a phishing site immediately after they log in.",
-      fixPrompt:
-        'Validate the redirect target against an allow-list of known internal paths before calling router.push(), and default to "/" if it does not match.',
-    },
-    {
-      severity: "low",
-      title: "Verbose error messages returned to client",
-      whatItMeans: "API routes return raw error and stack trace details in the JSON response body.",
-      whyItMatters:
-        "Stack traces can leak internal file paths, library versions, and query structure that help an attacker plan further attacks.",
-      fixPrompt:
-        'Catch errors on the server, log full details internally, and return a generic { error: "Something went wrong" } message to the client.',
-    },
-  ];
-  return base.map((f) => ({ ...f, id: makeId(), resolved: false }));
-}
+
 
 function formatDate(iso: string): string {
   return new Date(iso).toLocaleString(undefined, {
@@ -361,6 +358,7 @@ function HomeScreen({
   onDemo,
   showHistoryLink,
   goHistory,
+  error,
 }: {
   isDark: boolean;
   urlInput: string;
@@ -369,6 +367,7 @@ function HomeScreen({
   onDemo: () => void;
   showHistoryLink: boolean;
   goHistory: () => void;
+  error?: string | null;
 }) {
   const t = getTheme(isDark);
   return (
@@ -396,6 +395,17 @@ function HomeScreen({
         Paste a repository URL and Secure-VibeCode will scan it for exposed
         secrets, missing access controls, and common logic flaws.
       </p>
+
+      {error && (
+        <div
+          className={`mx-auto mt-6 flex max-w-md items-start gap-2 rounded-lg border px-4 py-3 text-left text-sm ${
+            isDark ? "border-red-500/30 bg-red-500/10 text-red-300" : "border-red-300 bg-red-50 text-red-700"
+          }`}
+        >
+          <AlertTriangle className="mt-0.5 h-4 w-4 flex-shrink-0" />
+          <span>{error}</span>
+        </div>
+      )}
 
       <div className={`mt-10 rounded-2xl border p-6 text-left shadow-xl sm:p-8 ${t.cardBg} ${t.cardShadow}`}>
         <label htmlFor="repo-url" className={`mb-2 block text-sm font-medium ${t.label}`}>
@@ -535,7 +545,6 @@ function FindingCard({
   finding,
   isExpanded,
   onToggleExpand,
-  onToggleResolved,
   onCopy,
   copiedKey,
 }: {
@@ -543,7 +552,6 @@ function FindingCard({
   finding: Finding;
   isExpanded: boolean;
   onToggleExpand: () => void;
-  onToggleResolved: () => void;
   onCopy: (text: string, key: string) => void;
   copiedKey: string | null;
 }) {
@@ -620,21 +628,6 @@ function FindingCard({
               </button>
             </div>
           </div>
-
-          <button
-            onClick={onToggleResolved}
-            className={`rounded-md border px-3 py-1.5 text-xs font-semibold transition ${
-              finding.resolved
-                ? isDark
-                  ? "border-slate-700 text-slate-400 hover:border-slate-600"
-                  : "border-slate-300 text-slate-500 hover:border-slate-400"
-                : isDark
-                ? "border-emerald-500/40 text-emerald-400 hover:bg-emerald-500/10"
-                : "border-emerald-400 text-emerald-600 hover:bg-emerald-50"
-            }`}
-          >
-            {finding.resolved ? "Mark as unresolved" : "Mark as Resolved"}
-          </button>
         </div>
       )}
     </div>
@@ -650,24 +643,24 @@ function ResultsScreen({
   expandedIds,
   copiedKey,
   onToggleExpand,
-  onToggleResolved,
   onCopy,
   onRescan,
   onGetBadge,
   onPastScans,
   goHome,
+  error,
 }: {
   isDark: boolean;
   activeScan: ScanResult | null;
   expandedIds: Set<string>;
   copiedKey: string | null;
   onToggleExpand: (id: string) => void;
-  onToggleResolved: (id: string) => void;
   onCopy: (text: string, key: string) => void;
-  onRescan: (url: string) => void;
+  onRescan: (scanId: string) => void;
   onGetBadge: () => void;
   onPastScans: () => void;
   goHome: () => void;
+  error?: string | null;
 }) {
   const t = getTheme(isDark);
 
@@ -723,7 +716,7 @@ function ResultsScreen({
           </div>
 
           <button
-            onClick={() => onRescan(activeScan.repoUrl)}
+            onClick={() => onRescan(activeScan.id)}
             className={`inline-flex items-center gap-1.5 rounded-lg border px-3 py-2 text-sm font-medium transition ${t.ghostBtn}`}
           >
             <RotateCcw className="h-3.5 w-3.5" />
@@ -741,6 +734,17 @@ function ResultsScreen({
         </div>
       </div>
 
+      {error && (
+        <div
+          className={`mt-6 flex items-start gap-2 rounded-lg border px-4 py-3 text-sm ${
+            isDark ? "border-red-500/30 bg-red-500/10 text-red-300" : "border-red-300 bg-red-50 text-red-700"
+          }`}
+        >
+          <AlertTriangle className="mt-0.5 h-4 w-4 flex-shrink-0" />
+          <span>{error}</span>
+        </div>
+      )}
+
       {/* Findings */}
       <div className="mt-6 space-y-3">
         {activeScan.findings.map((f) => (
@@ -750,12 +754,17 @@ function ResultsScreen({
             finding={f}
             isExpanded={expandedIds.has(f.id)}
             onToggleExpand={() => onToggleExpand(f.id)}
-            onToggleResolved={() => onToggleResolved(f.id)}
             onCopy={onCopy}
             copiedKey={copiedKey}
           />
         ))}
       </div>
+
+      {activeScan.findings.some((f) => !f.resolved) && (
+        <p className={`mt-3 text-center text-xs ${t.mutedText}`}>
+          Apply the fix prompts above in your AI coding tool, then click Re-scan to verify.
+        </p>
+      )}
 
       {/* Badge gating banner — makes the disabled state obvious instead of "doing nothing" */}
       {!canGetBadge && (
@@ -993,68 +1002,99 @@ export default function SecureVibeCodeApp() {
   const [stepIndex, setStepIndex] = useState(0);
   const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set());
   const [copiedKey, setCopiedKey] = useState<string | null>(null);
+  const [scanError, setScanError] = useState<string | null>(null);
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const abortRef = useRef<AbortController | null>(null);
 
   const activeScan = scans.find((s) => s.id === activeScanId) || null;
 
   useEffect(() => {
     return () => {
       if (intervalRef.current) clearInterval(intervalRef.current);
+      abortRef.current?.abort();
     };
   }, []);
 
-  function startScan(url: string) {
-    const trimmed = url.trim();
-    if (!trimmed) return;
-
-    const platform = detectPlatform(trimmed);
-    const newScan: ScanResult = {
-      id: makeId(),
-      repoUrl: trimmed,
-      platform,
-      date: new Date().toISOString(),
-      status: "scanning",
-      findings: [],
-    };
-
-    setScans((prev) => [newScan, ...prev]);
-    setActiveScanId(newScan.id);
-    setExpandedIds(new Set());
+  // Drives the decorative step/progress animation shown *while* the real
+  // request is in flight. It never reaches 100% on its own -- only the
+  // actual API response (success or failure) ends the scanning screen --
+  // so it stays honest instead of promising a fake completion time.
+  function startProgressAnimation() {
+    if (intervalRef.current) clearInterval(intervalRef.current);
+    let current = 0;
     setProgress(0);
     setStepIndex(0);
-    setScreen("scanning");
-
-    if (intervalRef.current) clearInterval(intervalRef.current);
-
-    let current = 0;
     intervalRef.current = setInterval(() => {
-      current += Math.floor(Math.random() * 12) + 6;
-
-      if (current >= 100) {
-        current = 100;
-        if (intervalRef.current) clearInterval(intervalRef.current);
-        setProgress(100);
-        setStepIndex(2);
-
-        setTimeout(() => {
-          const findings = generateFindings();
-          const openCritical = findings.filter((f) => f.severity === "critical").length;
-          const openHigh = findings.filter((f) => f.severity === "high").length;
-          const status: ScanStatus = openCritical === 0 && openHigh === 0 ? "pass" : "fail";
-
-          setScans((prev) => prev.map((s) => (s.id === newScan.id ? { ...s, findings, status } : s)));
-          setScreen("results");
-        }, 500);
-        return;
-      }
-
+      current = Math.min(current + Math.floor(Math.random() * 8) + 4, 92);
       setProgress(current);
       setStepIndex(current < 34 ? 0 : current < 67 ? 1 : 2);
     }, 500);
   }
 
-  function cancelScan() {
+  function stopProgressAnimation() {
     if (intervalRef.current) clearInterval(intervalRef.current);
+  }
+
+  async function startScan(url: string) {
+    const trimmed = url.trim();
+    if (!trimmed) return;
+
+    setScanError(null);
+    const controller = new AbortController();
+    abortRef.current = controller;
+
+    const placeholderId = makeId();
+    const placeholder: ScanResult = {
+      id: placeholderId,
+      repoUrl: trimmed,
+      platform: detectPlatform(trimmed),
+      date: new Date().toISOString(),
+      status: "scanning",
+      findings: [],
+    };
+    setScans((prev) => [placeholder, ...prev]);
+    setActiveScanId(placeholderId);
+    setExpandedIds(new Set());
+    setScreen("scanning");
+    startProgressAnimation();
+
+    try {
+      const apiScan = await createScan(trimmed, controller.signal);
+      const mapped = mapScan(apiScan);
+      // Swap the placeholder for the real scan (real id, real findings).
+      setScans((prev) => prev.map((s) => (s.id === placeholderId ? mapped : s)));
+      setActiveScanId(mapped.id);
+      stopProgressAnimation();
+      setProgress(100);
+      setStepIndex(2);
+      setScreen("results");
+    } catch (err) {
+      if (controller.signal.aborted) return; // user cancelled -- see cancelScan
+      stopProgressAnimation();
+      setScans((prev) => prev.filter((s) => s.id !== placeholderId));
+      setActiveScanId(null);
+      setScanError(err instanceof ApiError ? err.message : "Scan failed. Check the URL and try again.");
+      setScreen("home");
+    }
+  }
+
+  async function rescanCurrent(scanId: string) {
+    setScanError(null);
+    const controller = new AbortController();
+    abortRef.current = controller;
+    try {
+      const apiScan = await rescanScan(scanId, controller.signal);
+      const mapped = mapScan(apiScan);
+      setScans((prev) => prev.map((s) => (s.id === scanId ? mapped : s)));
+    } catch (err) {
+      if (controller.signal.aborted) return;
+      setScanError(err instanceof ApiError ? err.message : "Re-scan failed. Please try again.");
+    }
+  }
+
+  function cancelScan() {
+    abortRef.current?.abort();
+    stopProgressAnimation();
     setScans((prev) => prev.filter((s) => s.id !== activeScanId));
     setActiveScanId(null);
     setScreen("home");
@@ -1069,24 +1109,13 @@ export default function SecureVibeCodeApp() {
     });
   }
 
-  function toggleResolved(findingId: string) {
-    if (!activeScan) return;
-    setScans((prev) =>
-      prev.map((s) =>
-        s.id !== activeScan.id
-          ? s
-          : { ...s, findings: s.findings.map((f) => (f.id === findingId ? { ...f, resolved: !f.resolved } : f)) }
-      )
-    );
-  }
-
   async function copyToClipboard(text: string, key: string) {
     try {
       await navigator.clipboard.writeText(text);
       setCopiedKey(key);
       setTimeout(() => setCopiedKey((k) => (k === key ? null : k)), 1500);
     } catch {
-      // clipboard unavailable — fail silently in this mock
+      // clipboard unavailable — fail silently
     }
   }
 
@@ -1120,6 +1149,7 @@ export default function SecureVibeCodeApp() {
             onDemo={() => setUrlInput(DEMO_REPO_URL)}
             showHistoryLink={showHistoryLink}
             goHistory={() => setScreen("history")}
+            error={scanError}
           />
         )}
 
@@ -1140,12 +1170,12 @@ export default function SecureVibeCodeApp() {
             expandedIds={expandedIds}
             copiedKey={copiedKey}
             onToggleExpand={toggleExpanded}
-            onToggleResolved={toggleResolved}
             onCopy={copyToClipboard}
-            onRescan={startScan}
+            onRescan={rescanCurrent}
             onGetBadge={() => setScreen("badge")}
             onPastScans={() => setScreen("history")}
             goHome={goHome}
+            error={scanError}
           />
         )}
 
