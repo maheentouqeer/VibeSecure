@@ -1,0 +1,53 @@
+### Secure-VibeCode backend — manual test cheat-sheet
+### Use with the VS Code "REST Client" extension, or copy each block into curl.
+###
+### Ownership: POST /scans returns an X-Owner-Token response header. Every
+### later request for that scan (GET, rescan, badge) must send it back as
+### an X-Owner-Token request header, or you'll get a 404 -- same as if the
+### scan didn't exist. Copy the token from the create response into
+### {{ownerToken}} below.
+
+@baseUrl = http://localhost:8000
+@ownerToken = paste-the-x-owner-token-header-value-here
+
+### Create a scan
+POST {{baseUrl}}/scans
+Content-Type: application/json
+
+{
+  "target": "https://github.com/example/lovable-app"
+}
+
+### Fetch a scan by id (replace {{scanId}} with the id from the response above)
+GET {{baseUrl}}/scans/{{scanId}}
+X-Owner-Token: {{ownerToken}}
+
+### Rescan
+POST {{baseUrl}}/scans/{{scanId}}/rescan
+X-Owner-Token: {{ownerToken}}
+
+### Check badge eligibility
+GET {{baseUrl}}/scans/{{scanId}}/badge
+X-Owner-Token: {{ownerToken}}
+
+### Error case: missing scan
+GET {{baseUrl}}/scans/does-not-exist
+X-Owner-Token: {{ownerToken}}
+
+### Error case: malformed create request
+POST {{baseUrl}}/scans
+Content-Type: application/json
+
+{}
+
+### Error case: target isn't a valid URL -> 422
+POST {{baseUrl}}/scans
+Content-Type: application/json
+
+{
+  "target": "not-a-url"
+}
+
+### Error case: correct scan id but no/wrong owner token -> 404
+GET {{baseUrl}}/scans/{{scanId}}
+X-Owner-Token: someone-elses-token

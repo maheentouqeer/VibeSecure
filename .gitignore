@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 # Custom exclusions
 docs/
 
@@ -35,12 +36,41 @@ ENV/
 .pytest_cache/
 
 # IDE / Editor
+=======
+# Secrets -- never commit real credentials
+.env
+
+# Local databases
+*.db
+
+# Python
+__pycache__/
+*.py[cod]
+venv/
+env/
+.venv/
+ENV/
+.pytest_cache/
+build/
+dist/
+*.egg-info/
+
+# Logs (may contain scan output)
+*.log
+
+# Editor/OS cruft
+>>>>>>> origin/main
 .vscode/
 .idea/
 *.swp
 *.swo
+<<<<<<< HEAD
 
 # OS / Misc
 .DS_Store
 Thumbs.db
 *.log
+=======
+.DS_Store
+Thumbs.db
+>>>>>>> origin/main

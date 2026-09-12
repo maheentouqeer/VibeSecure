@@ -1,6 +1,25 @@
+<<<<<<< HEAD
 gitpython>=3.1,<4.0.0
 requests>=2.31,<3.0.0
 semgrep>=1.80,<2.0.0
 google-genai>=0.1.1,<0.5.0
 pytest>=7.0,<8.0.0
 python-dotenv>=1.0.0,<2.0.0
+=======
+# FastAPI backend
+fastapi>=0.115
+uvicorn[standard]>=0.30
+sqlalchemy>=2.0
+pydantic>=2.0
+python-dotenv>=1.0
+
+# Scanner / agent dependencies (real orchestrator's imports)
+gitpython>=3.1
+requests>=2.31
+semgrep>=1.80
+google-genai>=0.1.1
+
+# Testing
+pytest>=8.0
+httpx>=0.27
+>>>>>>> origin/main
