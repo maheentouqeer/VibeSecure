@@ -135,7 +135,7 @@ cd frontend
 ```bash
 npm install
 ```
-For Linux Users: 
+#### For Linux Users: 
 ```bash
 npm install --save-optional --os=linux --os=darwin --os=win32 @tailwindcss/oxide
 ```
