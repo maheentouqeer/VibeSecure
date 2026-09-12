@@ -6,8 +6,13 @@ CONTRACT — do not change without telling the team:
 """
 
 import json
+import logging
 import os
 from typing import Any
+
+logger = logging.getLogger(__name__)
+
+MODELS = ("gemini-3.8-flash", "gemini-3.6-flash")
 
 _TEMPLATES = {
     "hardcoded_secret": (
@@ -46,47 +51,56 @@ def _fallback_explain(finding: dict[str, Any]) -> dict[str, str]:
 
 def explain(finding: dict) -> dict:
     """Uses Gemini to generate plain-language explanations tailored to the specific finding.
+    Cascades through models before falling back to pre-defined explanation templates.
     Keeps the two contract keys: what_it_means, why_it_matters.
     """
     api_key = os.environ.get("GEMINI_API_KEY")
     if not api_key:
+        logger.debug("GEMINI_API_KEY not set; using fallback explainer.")
         return _fallback_explain(finding)
 
-    prompt = f"""You are a helpful security educator explaining a vulnerability to an application developer.
-Explain the following security finding in clear, plain, and non-jargon language:
+    prompt = f"""You are a cybersecurity expert explaining vulnerabilities to a non-expert developer.
+Analyze the following security finding and explain it clearly in plain English.
+
+Finding details:
 {json.dumps(finding, indent=2)}
 
-Output MUST be a JSON object with exactly two string keys:
-- "what_it_means": Explain what this vulnerability is in simple terms (1-2 sentences).
-- "why_it_matters": Explain the practical risk/consequences if left unfixed (1-2 sentences).
+Respond with a valid JSON object containing exactly these two keys:
+- "what_it_means": A simple 1-2 sentence explanation of what this vulnerability is in plain terms.
+- "why_it_matters": A simple 1-2 sentence explanation of the real-world risk or impact to the app/users.
 
-Do not include markdown code formatting or surrounding explanations, output only raw JSON.
+Return ONLY the raw JSON object, without markdown formatting or code blocks.
 """
 
     try:
         from google import genai
 
         client = genai.Client(api_key=api_key)
-        response = client.models.generate_content(
-            model="gemini-3.8-flash",
-            contents=prompt,
-        )
-        text = response.text.strip()
-        if text.startswith("```"):
-            lines = text.splitlines()
-            if lines[0].startswith("```"):
-                lines = lines[1:]
-            if lines and lines[-1].startswith("```"):
-                lines = lines[:-1]
-            text = "\n".join(lines).strip()
+        for model in MODELS:
+            try:
+                response = client.models.generate_content(
+                    model=model,
+                    contents=prompt,
+                )
+                text = (response.text or "").strip()
+                if text.startswith("```"):
+                    lines = text.splitlines()
+                    if lines[0].startswith("```"):
+                        lines = lines[1:]
+                    if lines and lines[-1].startswith("```"):
+                        lines = lines[:-1]
+                    text = "\n".join(lines).strip()
 
-        data = json.loads(text)
-        if isinstance(data, dict) and "what_it_means" in data and "why_it_matters" in data:
-            return {
-                "what_it_means": str(data["what_it_means"]),
-                "why_it_matters": str(data["why_it_matters"]),
-            }
-    except Exception:
-        pass
+                parsed = json.loads(text)
+                if isinstance(parsed, dict) and "what_it_means" in parsed and "why_it_matters" in parsed:
+                    return {
+                        "what_it_means": str(parsed["what_it_means"]).strip(),
+                        "why_it_matters": str(parsed["why_it_matters"]).strip(),
+                    }
+            except Exception as model_err:
+                logger.warning("Error explaining finding with model %s: %s", model, model_err)
+                continue
+    except Exception as err:
+        logger.warning("Failed to initialize or execute Gemini client for explainer: %s", err)
 
     return _fallback_explain(finding)

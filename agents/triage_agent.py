@@ -8,8 +8,13 @@ CONTRACT — do not change without telling the team:
 """
 
 import json
+import logging
 import os
 from typing import Any
+
+logger = logging.getLogger(__name__)
+
+MODELS = ("gemini-3.8-flash", "gemini-3.6-flash")
 
 _VALID_SEVERITIES = {"critical", "high", "medium", "low"}
 
@@ -47,13 +52,14 @@ def _fallback_triage(raw_findings: list[dict[str, Any]]) -> list[dict[str, Any]]
 
 def triage(raw_findings: list[dict]) -> list[dict]:
     """Uses Gemini to deduplicate and rank raw findings by real-world security severity.
-    Falls back gracefully if the API key is not configured or an error occurs.
+    Cascades through models before falling back gracefully if errors occur or key is unset.
     """
     if not raw_findings:
         return []
 
     api_key = os.environ.get("GEMINI_API_KEY")
     if not api_key:
+        logger.debug("GEMINI_API_KEY not set; using fallback triage.")
         return _fallback_triage(raw_findings)
 
     prompt = f"""You are an application security triage expert.
@@ -80,38 +86,44 @@ Do not output markdown code fences or any extra commentary, only valid JSON.
         from google import genai
 
         client = genai.Client(api_key=api_key)
-        response = client.models.generate_content(
-            model="gemini-3.8-flash",
-            contents=prompt,
-        )
-        text = response.text.strip()
-        if text.startswith("```"):
-            lines = text.splitlines()
-            if lines[0].startswith("```"):
-                lines = lines[1:]
-            if lines and lines[-1].startswith("```"):
-                lines = lines[:-1]
-            text = "\n".join(lines).strip()
+        for model in MODELS:
+            try:
+                response = client.models.generate_content(
+                    model=model,
+                    contents=prompt,
+                )
+                text = (response.text or "").strip()
+                if text.startswith("```"):
+                    lines = text.splitlines()
+                    if lines[0].startswith("```"):
+                        lines = lines[1:]
+                    if lines and lines[-1].startswith("```"):
+                        lines = lines[:-1]
+                    text = "\n".join(lines).strip()
 
-        parsed = json.loads(text)
-        if isinstance(parsed, list):
-            sanitized = []
-            for i, item in enumerate(parsed):
-                if not isinstance(item, dict):
-                    continue
-                sev = str(item.get("severity", "medium")).lower()
-                if sev not in _VALID_SEVERITIES:
-                    sev = "medium"
-                sanitized.append({
-                    "id": str(item.get("id", f"finding_{i}")),
-                    "category": str(item.get("category", "unknown")),
-                    "label": str(item.get("label", "Unlabeled finding")),
-                    "file": str(item.get("file", "")),
-                    "severity": sev,
-                })
-            if sanitized:
-                return sanitized
-    except Exception:
-        pass
+                parsed = json.loads(text)
+                if isinstance(parsed, list):
+                    sanitized = []
+                    for i, item in enumerate(parsed):
+                        if not isinstance(item, dict):
+                            continue
+                        sev = str(item.get("severity", "medium")).lower()
+                        if sev not in _VALID_SEVERITIES:
+                            sev = "medium"
+                        sanitized.append({
+                            "id": str(item.get("id", f"finding_{i}")),
+                            "category": str(item.get("category", "unknown")),
+                            "label": str(item.get("label", "Unlabeled finding")),
+                            "file": str(item.get("file", "")),
+                            "severity": sev,
+                        })
+                    if sanitized:
+                        return sanitized
+                logger.warning("Model %s returned unexpected output structure: %s", model, text)
+            except Exception as model_err:
+                logger.warning("Error during triage generation with model %s: %s", model, model_err)
+                continue
+    except Exception as err:
+        logger.warning("Failed to initialize or execute Gemini client for triage: %s", err)
 
     return _fallback_triage(raw_findings)
