@@ -34,7 +34,7 @@ def run_semgrep(repo_path: Path) -> list[dict]:
             "category": "static_analysis",
             "label": r.get("check_id", "unknown_rule"),
             "file": str(Path(r["path"]).relative_to(repo_path)) if r.get("path") else "",
-            "line": r.get("start", {}).get("line"),
+            "line": r.get("start", {}).get("line") or 0,
             "message": r.get("extra", {}).get("message", ""),
             "raw_severity": r.get("extra", {}).get("severity", "medium").lower(),
         })
