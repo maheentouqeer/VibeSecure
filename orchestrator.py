@@ -4,7 +4,6 @@ Two entry points everyone else builds against:
   run_full_scan(target) -> dict
   rescan(target, previous_findings) -> list[dict]
 """
-import logging
 from pathlib import Path
 
 from scanner.repo_utils import clone_repo, cleanup
@@ -16,8 +15,6 @@ from scanner.live_scanner import scan_live_url
 from agents.triage_agent import triage
 from agents.explainer_agent import explain
 from agents.fixprompt_agent import generate_fix_prompt
-
-logger = logging.getLogger(__name__)
 
 # Known git hosts get routed straight to a clone. This is not an
 # exhaustive list -- anything else still gets a clone attempt first
@@ -73,8 +70,7 @@ def run_full_scan(target: str) -> dict:
     else:
         try:
             raw_findings, platform = _run_repo_scan(target)
-        except Exception as e:
-            logger.warning(f"Failed to clone {target}: {e}. Falling back to live URL scan.")
+        except Exception:
             raw_findings = scan_live_url(target)
             platform = "generic"
 
