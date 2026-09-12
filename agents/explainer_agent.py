@@ -59,15 +59,17 @@ def explain(finding: dict) -> dict:
         logger.debug("GEMINI_API_KEY not set; using fallback explainer.")
         return _fallback_explain(finding)
 
-    prompt = f"""You are a helpful security educator explaining a vulnerability to an application developer.
-Explain the following security finding in clear, plain, and non-jargon language:
+    prompt = f"""You are a cybersecurity expert explaining vulnerabilities to a non-expert developer.
+Analyze the following security finding and explain it clearly in plain English.
+
+Finding details:
 {json.dumps(finding, indent=2)}
 
-Output MUST be a JSON object with exactly two string keys:
-- "what_it_means": Explain what this vulnerability is in simple terms (1-2 sentences).
-- "why_it_matters": Explain the practical risk/consequences if left unfixed (1-2 sentences).
+Respond with a valid JSON object containing exactly these two keys:
+- "what_it_means": A simple 1-2 sentence explanation of what this vulnerability is in plain terms.
+- "why_it_matters": A simple 1-2 sentence explanation of the real-world risk or impact to the app/users.
 
-Do not include markdown code formatting or surrounding explanations, output only raw JSON.
+Return ONLY the raw JSON object, without markdown formatting or code blocks.
 """
 
     try:

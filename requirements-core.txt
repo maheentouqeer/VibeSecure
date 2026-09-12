@@ -1,4 +1,0 @@
-gitpython>=3.1
-requests>=2.31
-semgrep>=1.80
-google-genai>=0.1.1

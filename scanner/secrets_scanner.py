@@ -13,7 +13,7 @@ PATTERNS = {
     "Google API Key": r"AIza[0-9A-Za-z\-_]{35}",
     "Stripe Secret Key": r"sk_live_[0-9a-zA-Z]{24,}",
     "GitHub Token": r"ghp_[0-9A-Za-z]{36}",
-    "Generic Bearer Secret": r"(?i)(api_key|apikey|secret|token)\s*[:=]\s*['\"][0-9A-Za-z\-_]{20,}['\"]",
+    "Generic Bearer Secret": r"(?i)(?:api_key|apikey|secret|token)\s*[:=]\s*['\"][0-9A-Za-z\-_]{20,}(?=['\"]|\s|$)",
 }
 
 SKIP_DIRS = {".git", "node_modules", "dist", "build", "__pycache__", ".next"}
