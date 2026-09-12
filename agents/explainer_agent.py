@@ -12,7 +12,7 @@ from typing import Any
 
 logger = logging.getLogger(__name__)
 
-MODELS = ("gemini-2.5-flash", "gemini-2.0-flash")
+MODELS = ("gemini-3.8-flash", "gemini-3.6-flash")
 
 _TEMPLATES = {
     "hardcoded_secret": (
@@ -101,4 +101,14 @@ Do not include markdown code formatting or surrounding explanations, output only
                         "why_it_matters": str(data["why_it_matters"]),
                     }
                 logger.warning(
-                    "Model
+                    "Model %s returned JSON missing expected keys: %s",
+                    model,
+                    text,
+                )
+            except Exception as model_err:
+                logger.warning("Error generating explanation with model %s: %s", model, model_err)
+                continue
+    except Exception as err:
+        logger.warning("Failed to initialize or run Gemini client: %s", err)
+
+    return _fallback_explain(finding)

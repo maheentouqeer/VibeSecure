@@ -6,10 +6,13 @@ CONTRACT — do not change without telling the team:
 """
 
 import json
+import logging
 import os
 from typing import Any
 
-MODELS = ("gemini-3.8-flash", "gemini-2.5-flash")
+logger = logging.getLogger(__name__)
+
+MODELS = ("gemini-3.8-flash", "gemini-3.6-flash")
 
 _GENERIC_FIXES = {
     "hardcoded_secret": "Move the secret found in {file} out of the code and into an environment variable or your platform's secrets manager, then remove it from the source file.",
@@ -72,11 +75,12 @@ def _fallback_fix_prompt(finding: dict[str, Any], platform: str) -> str:
 
 def generate_fix_prompt(finding: dict, platform: str) -> str:
     """Uses Gemini to generate a tailored fix prompt based on the finding and target platform.
-    Cascades through models (gemini-3.8-flash -> gemini-2.5-flash) and falls back to
+    Cascades through models (gemini-3.8-flash -> gemini-3.6-flash) and falls back to
     platform-aware deterministic templates if LLM calls fail or API key is absent.
     """
     api_key = os.environ.get("GEMINI_API_KEY")
     if not api_key:
+        logger.debug("GEMINI_API_KEY not set; using fallback fix prompt.")
         return _fallback_fix_prompt(finding, platform)
 
     prompt = f"""You are an AI coding assistant prompt engineer.
@@ -106,12 +110,13 @@ Return ONLY the prompt string to give to the vibe-coding tool. Do not wrap in ma
                     model=model,
                     contents=prompt,
                 )
-                text = response.text.strip()
+                text = (response.text or "").strip()
                 if text:
                     return text
-            except Exception:
+            except Exception as model_err:
+                logger.warning("Error generating fix prompt with model %s: %s", model, model_err)
                 continue
-    except Exception:
-        pass
+    except Exception as err:
+        logger.warning("Failed to initialize or execute Gemini client for fix prompt: %s", err)
 
     return _fallback_fix_prompt(finding, platform)

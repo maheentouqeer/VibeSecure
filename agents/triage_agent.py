@@ -8,10 +8,13 @@ CONTRACT — do not change without telling the team:
 """
 
 import json
+import logging
 import os
 from typing import Any
 
-MODELS = ("gemini-3.8-flash", "gemini-2.5-flash")
+logger = logging.getLogger(__name__)
+
+MODELS = ("gemini-3.8-flash", "gemini-3.6-flash")
 
 _VALID_SEVERITIES = {"critical", "high", "medium", "low"}
 
@@ -56,6 +59,7 @@ def triage(raw_findings: list[dict]) -> list[dict]:
 
     api_key = os.environ.get("GEMINI_API_KEY")
     if not api_key:
+        logger.debug("GEMINI_API_KEY not set; using fallback triage.")
         return _fallback_triage(raw_findings)
 
     prompt = f"""You are an application security triage expert.
@@ -88,7 +92,7 @@ Do not output markdown code fences or any extra commentary, only valid JSON.
                     model=model,
                     contents=prompt,
                 )
-                text = response.text.strip()
+                text = (response.text or "").strip()
                 if text.startswith("```"):
                     lines = text.splitlines()
                     if lines[0].startswith("```"):
@@ -115,9 +119,11 @@ Do not output markdown code fences or any extra commentary, only valid JSON.
                         })
                     if sanitized:
                         return sanitized
-            except Exception:
+                logger.warning("Model %s returned unexpected output structure: %s", model, text)
+            except Exception as model_err:
+                logger.warning("Error during triage generation with model %s: %s", model, model_err)
                 continue
-    except Exception:
-        pass
+    except Exception as err:
+        logger.warning("Failed to initialize or execute Gemini client for triage: %s", err)
 
     return _fallback_triage(raw_findings)
