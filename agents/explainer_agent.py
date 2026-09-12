@@ -74,19 +74,11 @@ Return ONLY the raw JSON object, without markdown formatting or code blocks.
 
     try:
         from google import genai
-<<<<<<< HEAD
-=======
         from google.genai import types
->>>>>>> origin/main
 
         client = genai.Client(api_key=api_key)
         for model in MODELS:
             try:
-<<<<<<< HEAD
-                response = client.models.generate_content(
-                    model=model,
-                    contents=prompt,
-=======
                 config = types.GenerateContentConfig(
                     response_mime_type="application/json",
                 )
@@ -94,7 +86,6 @@ Return ONLY the raw JSON object, without markdown formatting or code blocks.
                     model=model,
                     contents=prompt,
                     config=config,
->>>>>>> origin/main
                 )
                 text = (response.text or "").strip()
                 if text.startswith("```"):
@@ -105,35 +96,17 @@ Return ONLY the raw JSON object, without markdown formatting or code blocks.
                         lines = lines[:-1]
                     text = "\n".join(lines).strip()
 
-<<<<<<< HEAD
                 parsed = json.loads(text)
                 if isinstance(parsed, dict) and "what_it_means" in parsed and "why_it_matters" in parsed:
                     return {
                         "what_it_means": str(parsed["what_it_means"]).strip(),
                         "why_it_matters": str(parsed["why_it_matters"]).strip(),
                     }
+                logger.warning("Model %s returned JSON missing expected keys: %s", model, text)
             except Exception as model_err:
                 logger.warning("Error explaining finding with model %s: %s", model, model_err)
                 continue
     except Exception as err:
         logger.warning("Failed to initialize or execute Gemini client for explainer: %s", err)
-=======
-                data = json.loads(text)
-                if isinstance(data, dict) and "what_it_means" in data and "why_it_matters" in data:
-                    return {
-                        "what_it_means": str(data["what_it_means"]),
-                        "why_it_matters": str(data["why_it_matters"]),
-                    }
-                logger.warning(
-                    "Model %s returned JSON missing expected keys: %s",
-                    model,
-                    text,
-                )
-            except Exception as model_err:
-                logger.warning("Error generating explanation with model %s: %s", model, model_err)
-                continue
-    except Exception as err:
-        logger.warning("Failed to initialize or run Gemini client: %s", err)
->>>>>>> origin/main
 
     return _fallback_explain(finding)
