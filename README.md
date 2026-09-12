@@ -34,40 +34,123 @@ The project is structured into several key layers:
 ## Getting Started
 
 ### Prerequisites
-- Python 3.11+
-- Node.js 18+ (for the frontend)
-- Semgrep (optional, for static analysis scanning: `pip install semgrep`)
 
-### Backend Setup
-1. Install dependencies:
-   ```bash
-   pip install -r requirements.txt
-   ```
-2. Set up your environment variables in a `.env` file:
-   ```env
-   GEMINI_API_KEY=your_gemini_api_key_here
-   DATABASE_URL=sqlite:///./secure_vibecode.db
-   ALLOWED_ORIGINS=http://localhost:3000
-   ```
-3. Run the FastAPI server:
-   ```bash
-   uvicorn backend.main:app --reload --port 8000
-   ```
+Across all operating systems, make sure you have the following installed:
+- **Git**: [git-scm.com](https://git-scm.com/) (required to clone target repositories for scanning).
+- **Python 3.11+**: [python.org](https://www.python.org/downloads/) (make sure to select "Add Python to PATH" on Windows).
+- **Node.js 18+ & npm**: [nodejs.org](https://nodejs.org/) (required to run the Next.js frontend).
+- **Semgrep (optional)**:
+  - **macOS / Linux**: Install via `pip install semgrep` or Homebrew (`brew install semgrep`).
+  - **Windows**: Semgrep CLI runs natively on Linux and macOS; on Windows, Semgrep is supported through WSL2 (Windows Subsystem for Linux) or Docker. If omitted, Secure-VibeCode will safely skip Semgrep checks and continue running secrets, live URL, and Supabase RLS scans.
 
-### Frontend Setup
-1. Navigate to the frontend directory:
-   ```bash
-   cd frontend
-   ```
-2. Install dependencies:
-   ```bash
-   npm install
-   ```
-3. Run the development server:
-   ```bash
-   npm run dev
-   ```
-4. Open [http://localhost:3000](http://localhost:3000) in your browser.
+---
+
+### 1. Clone the Repository
+
+```bash
+git clone https://github.com/your-username/secure-vibecode.git
+cd secure-vibecode
+```
+
+---
+
+### 2. Backend Setup
+
+#### Step A: Create and Activate a Virtual Environment
+
+- **macOS / Linux (Bash or Zsh):**
+  ```bash
+  python3 -m venv .venv
+  source .venv/bin/activate
+  ```
+
+- **Windows (PowerShell):**
+  ```powershell
+  python -m venv .venv
+  .venv\Scripts\Activate.ps1
+  ```
+  *(If script execution is disabled on PowerShell, run `Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass` in your session first)*
+
+- **Windows (Command Prompt / CMD):**
+  ```cmd
+  python -m venv .venv
+  .venv\Scripts\activate.bat
+  ```
+
+#### Step B: Install Python Dependencies
+
+```bash
+pip install --upgrade pip
+pip install -r requirements.txt
+```
+
+*(Optional static analysis runner: `pip install semgrep` on macOS/Linux/WSL)*
+
+#### Step C: Configure Environment Variables
+
+Create a `.env` file from `.env.example`:
+
+- **macOS / Linux:**
+  ```bash
+  cp .env.example .env
+  ```
+
+- **Windows (PowerShell):**
+  ```powershell
+  Copy-Item .env.example .env
+  ```
+
+- **Windows (Command Prompt):**
+  ```cmd
+  copy .env.example .env
+  ```
+
+Configure your environment variables in `.env`:
+```env
+GEMINI_API_KEY=your_gemini_api_key_here
+DATABASE_URL=sqlite:///./secure_vibecode.db
+ALLOWED_ORIGINS=http://localhost:3000
+```
+> **Note**: An API key from [Google AI Studio](https://aistudio.google.com/) is recommended for triage, explanation, and fix prompt generation. If left unset, deterministic heuristic fallbacks will automatically be used.
+
+#### Step D: Run the FastAPI Server
+
+```bash
+uvicorn backend.main:app --reload --port 8000
+```
+The API server will run on [http://localhost:8000](http://localhost:8000) (interactive OpenAPI docs at [http://localhost:8000/docs](http://localhost:8000/docs)).
+
+---
+
+### 3. Frontend Setup
+
+Open a new terminal window or tab, and navigate to the frontend directory:
+
+```bash
+cd frontend
+```
+
+#### Step A: Install Node Dependencies
+
+```bash
+npm install
+```
+
+#### Step B: (Optional) Configure Frontend API URL
+
+By default, the frontend connects to `http://localhost:8000`. To customize this, create a `.env.local` file inside the `frontend/` directory:
+
+```env
+NEXT_PUBLIC_API_URL=http://localhost:8000
+```
+
+#### Step C: Run the Next.js Development Server
+
+```bash
+npm run dev
+```
+
+Open [http://localhost:3000](http://localhost:3000) in your web browser.
 
 ---
 
@@ -75,9 +158,15 @@ The project is structured into several key layers:
 
 To measure the precision, recall, and F1 score of the scanner suite against the curated ground-truth test benchmark dataset:
 
-```bash
-python -m eval.evaluate
-```
+- **macOS / Linux:**
+  ```bash
+  python3 -m eval.evaluate
+  ```
+
+- **Windows:**
+  ```bash
+  python -m eval.evaluate
+  ```
 
 ---
 
@@ -85,6 +174,7 @@ python -m eval.evaluate
 
 To run the deterministic agent and API test suites:
 
-```bash
-pytest
-```
+- **macOS / Linux / Windows:**
+  ```bash
+  pytest
+  ```
