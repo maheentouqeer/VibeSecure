@@ -24,7 +24,7 @@ The layer consists of three LLM-powered agents and one deterministic verificatio
   - Ingests all raw finding dictionaries from the four scanners.
   - Deduplicates repeated findings pointing to the same root issue.
   - Re-ranks and normalizes severity into standard tiers based on real-world impact and exploitability.
-- **Model**: `gemini-2.5-flash` using the official `google-genai` SDK.
+- **Model**: `gemini-3.8-flash` using the official `google-genai` SDK.
 - **Contract Adherence**:
   - **Input**: `raw_findings: list[dict]`
   - **Output**: `list[dict]` where every dictionary has strictly:
@@ -43,7 +43,7 @@ The layer consists of three LLM-powered agents and one deterministic verificatio
 - **Role**:
   - Generates clear, non-jargon, plain-English explanations targeted at vibe-coders and non-security engineers.
   - Focuses on real-world impact rather than abstract vulnerability theory.
-- **Model**: `gemini-2.5-flash` using `google-genai`.
+- **Model**: `gemini-3.8-flash` using `google-genai`.
 - **Contract Adherence**:
   - **Input**: Single finding dictionary (post-triage).
   - **Output**: A dictionary with strictly two keys:
@@ -63,7 +63,7 @@ The layer consists of three LLM-powered agents and one deterministic verificatio
     - **Replit**: Guides secrets directly to the Replit Secrets manager instead of `.env` files.
     - **Bolt / v0**: Accounts for framework environment variables (e.g. Next.js / Vite client vs server variable scoping).
     - **Generic**: Standard remediation recipes targeting the affected file.
-- **Model**: `gemini-2.5-flash` using `google-genai`.
+- **Model**: `gemini-3.8-flash` using `google-genai`.
 - **Contract Adherence**:
   - **Input**: Single finding dictionary (post-explain) and `platform: str`.
   - **Output**: Single prompt string.
