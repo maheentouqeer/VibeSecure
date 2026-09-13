@@ -21,6 +21,7 @@ _GENERIC_FIXES = {
     "exposed_file": "Update your hosting/deploy configuration so {file} is not publicly served.",
     "missing_header": "Add the {label} response header to your app's server configuration.",
     "cors_misconfig": "Restrict CORS to your app's actual domain instead of allowing all origins (*).",
+    "scan_incomplete": "Re-run the scan -- static analysis did not complete last time, so results may be incomplete.",
 }
 
 _PLATFORM_FIXES = {

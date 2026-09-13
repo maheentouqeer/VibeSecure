@@ -645,6 +645,7 @@ function ResultsScreen({
   onToggleExpand,
   onCopy,
   onRescan,
+  rescanningId,
   onGetBadge,
   onPastScans,
   goHome,
@@ -657,6 +658,7 @@ function ResultsScreen({
   onToggleExpand: (id: string) => void;
   onCopy: (text: string, key: string) => void;
   onRescan: (scanId: string) => void;
+  rescanningId?: string | null;
   onGetBadge: () => void;
   onPastScans: () => void;
   goHome: () => void;
@@ -717,10 +719,11 @@ function ResultsScreen({
 
           <button
             onClick={() => onRescan(activeScan.id)}
-            className={`inline-flex items-center gap-1.5 rounded-lg border px-3 py-2 text-sm font-medium transition ${t.ghostBtn}`}
+            disabled={rescanningId === activeScan.id}
+            className={`inline-flex items-center gap-1.5 rounded-lg border px-3 py-2 text-sm font-medium transition disabled:cursor-not-allowed disabled:opacity-60 ${t.ghostBtn}`}
           >
-            <RotateCcw className="h-3.5 w-3.5" />
-            Re-scan
+            <RotateCcw className={`h-3.5 w-3.5 ${rescanningId === activeScan.id ? "animate-spin" : ""}`} />
+            {rescanningId === activeScan.id ? "Re-scanning..." : "Re-scan"}
           </button>
         </div>
 
@@ -1003,6 +1006,7 @@ export default function SecureVibeCodeApp() {
   const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set());
   const [copiedKey, setCopiedKey] = useState<string | null>(null);
   const [scanError, setScanError] = useState<string | null>(null);
+  const [rescanningId, setRescanningId] = useState<string | null>(null);
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const abortRef = useRef<AbortController | null>(null);
 
@@ -1079,7 +1083,9 @@ export default function SecureVibeCodeApp() {
   }
 
   async function rescanCurrent(scanId: string) {
+    if (rescanningId) return; // ignore repeat clicks while one is already in flight
     setScanError(null);
+    setRescanningId(scanId);
     const controller = new AbortController();
     abortRef.current = controller;
     try {
@@ -1089,6 +1095,8 @@ export default function SecureVibeCodeApp() {
     } catch (err) {
       if (controller.signal.aborted) return;
       setScanError(err instanceof ApiError ? err.message : "Re-scan failed. Please try again.");
+    } finally {
+      setRescanningId((prev) => (prev === scanId ? null : prev));
     }
   }
 
@@ -1172,6 +1180,7 @@ export default function SecureVibeCodeApp() {
             onToggleExpand={toggleExpanded}
             onCopy={copyToClipboard}
             onRescan={rescanCurrent}
+            rescanningId={rescanningId}
             onGetBadge={() => setScreen("badge")}
             onPastScans={() => setScreen("history")}
             goHome={goHome}

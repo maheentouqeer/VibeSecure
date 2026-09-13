@@ -9,8 +9,20 @@ appears next to an `enable row level security` statement.
 import re
 from pathlib import Path
 
-CREATE_TABLE = re.compile(r"create\s+table\s+(?:if not exists\s+)?[\"']?(\w+)[\"']?", re.IGNORECASE)
-ENABLE_RLS = re.compile(r"alter\s+table\s+[\"']?(\w+)[\"']?\s+enable\s+row\s+level\s+security", re.IGNORECASE)
+# Table names may be schema-qualified and/or quoted, e.g.:
+#   CREATE TABLE "public"."profiles" (...)
+#   ALTER TABLE ONLY "public"."profiles" ENABLE ROW LEVEL SECURITY;
+# so we capture just the final (table) identifier, ignoring any leading
+# schema segment and the optional "ONLY" keyword.
+_IDENT = r"(?:\"[^\"]+\"|'[^']+'|\w+)"
+CREATE_TABLE = re.compile(
+    rf"create\s+table\s+(?:if not exists\s+)?(?:{_IDENT}\s*\.\s*)?[\"']?(\w+)[\"']?",
+    re.IGNORECASE,
+)
+ENABLE_RLS = re.compile(
+    rf"alter\s+table\s+(?:only\s+)?(?:{_IDENT}\s*\.\s*)?[\"']?(\w+)[\"']?\s+enable\s+row\s+level\s+security",
+    re.IGNORECASE,
+)
 
 
 def check_rls(repo_path: Path) -> list[dict]:

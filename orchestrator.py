@@ -7,7 +7,7 @@ Two entry points everyone else builds against:
 from pathlib import Path
 
 from scanner.repo_utils import clone_repo, cleanup
-from scanner.platform_detector import detect_platform
+from scanner.platform_detector import detect_platform, is_supabase_project
 from scanner.secrets_scanner import scan_secrets
 from scanner.code_scanner import run_semgrep
 from scanner.supabase_rls_checker import check_rls
@@ -44,7 +44,8 @@ def _run_repo_scan(target: str) -> tuple[list[dict], str]:
         platform = detect_platform(repo_path)
         raw_findings += scan_secrets(repo_path)
         raw_findings += run_semgrep(repo_path)
-        raw_findings += check_rls(repo_path)
+        if is_supabase_project(repo_path):
+            raw_findings += check_rls(repo_path)
     finally:
         cleanup(repo_path)
     return raw_findings, platform
