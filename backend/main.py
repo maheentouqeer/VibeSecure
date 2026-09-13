@@ -164,12 +164,15 @@ def rescan_scan(
         (d["category"], d["label"], d.get("file")): d["status"]
         for d in diff_findings(previous, new_findings)
     }
+    new_keys = {(f["category"], f["label"], f.get("file")) for f in new_findings}
     for existing in scan.findings:
-        if existing.status != "open":
-            continue
         key = (existing.category, existing.label, existing.file)
-        if diffed_by_key.get(key) == "resolved":
+        if existing.status == "open" and diffed_by_key.get(key) == "resolved":
             existing.status = "resolved"
+        elif existing.status == "resolved" and key in new_keys:
+            # A previously-fixed issue reappeared in the fresh scan -- reopen it
+            # instead of leaving it silently marked resolved.
+            existing.status = "open"
 
     # Anything in the fresh scan that wasn't already tracked is a new finding.
     existing_keys = {(f.category, f.label, f.file) for f in scan.findings}

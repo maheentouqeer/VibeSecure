@@ -23,6 +23,27 @@ SIGNATURES = {
 }
 
 
+def is_supabase_project(repo_path: Path) -> bool:
+    """True only when the repo shows real evidence of using Supabase --
+    a `supabase/` CLI project directory, or `@supabase/supabase-js` as an
+    actual dependency in package.json. Used to gate Supabase-specific
+    checks (like RLS) so they don't fire on any repo that merely happens
+    to contain a `.sql` file with a CREATE TABLE statement."""
+    if (repo_path / "supabase").is_dir():
+        return True
+
+    package_json = repo_path / "package.json"
+    if package_json.exists():
+        try:
+            package_text = package_json.read_text(errors="ignore").lower()
+        except Exception:
+            package_text = ""
+        if "@supabase/supabase-js" in package_text:
+            return True
+
+    return False
+
+
 def detect_platform(repo_path: Path) -> str:
     package_json = repo_path / "package.json"
     package_text = ""

@@ -39,6 +39,10 @@ _TEMPLATES = {
         "Your site allows requests from any website (CORS wide open).",
         "Other websites could make requests to your app on a visitor's behalf without permission.",
     ),
+    "scan_incomplete": (
+        "The static analysis scanner didn't finish, so some issues may not have been checked for.",
+        "Findings from this category of scan may be missing or incomplete for this run -- consider re-scanning.",
+    ),
 }
 
 _DEFAULT = ("A potential security issue was found.", "This could expose your app or its users to risk.")
