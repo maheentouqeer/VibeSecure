@@ -20,8 +20,11 @@ PATTERNS = {
 SKIP_DIRS = {".git", "node_modules", "dist", "build", "__pycache__", ".next"}
 TEXT_EXTS = {".js", ".ts", ".tsx", ".jsx", ".py", ".env", ".json", ".yml", ".yaml", ".md", ".txt"}
 
-# Candidate string match for entropy analysis (e.g., quotes or assignments)
-POTENTIAL_SECRET_STR_RE = re.compile(r"['\"]([A-Za-z0-9_\-+/=]{16,128})['\"]")
+# Candidate string match for entropy analysis (e.g., quotes or assignments).
+# Deliberately broad -- excludes only the quote character itself and
+# whitespace, so symbol-heavy secrets (which are often the highest-entropy,
+# most "secure-looking" ones) aren't invisible to this check.
+POTENTIAL_SECRET_STR_RE = re.compile(r"""['"]([^'"\s]{16,128})['"]""")
 
 
 def shannon_entropy(data: str) -> float:
@@ -35,6 +38,60 @@ def shannon_entropy(data: str) -> float:
         entropy -= prob * math.log2(prob)
     return entropy
 
+
+def scan_secrets(repo_path: Path) -> list[dict]:
+    findings = []
+    for file in repo_path.rglob("*"):
+        if not file.is_file():
+            continue
+        if any(part in SKIP_DIRS for part in file.parts):
+            continue
+        if file.suffix not in TEXT_EXTS and file.name != ".env":
+            continue
+        try:
+            text = file.read_text(errors="ignore")
+        except Exception:
+            continue
+
+        matched_spans = set()
+
+        # 1. Pattern matching
+        for label, pattern in PATTERNS.items():
+            for match in re.finditer(pattern, text):
+                matched_spans.add((match.start(), match.end()))
+                findings.append({
+                    "category": "hardcoded_secret",
+                    "label": label,
+                    "file": str(file.relative_to(repo_path)),
+                    "match_preview": match.group(0)[:6] + "...(masked)",
+                    "raw_severity": "critical",
+                })
+
+        # 2. Entropy scoring for non-pattern matched high-entropy strings
+        for match in POTENTIAL_SECRET_STR_RE.finditer(text):
+            span = match.span(1)
+            # Avoid duplicate flagging if already covered by regex match
+            if any(m_start <= span[0] and span[1] <= m_end for m_start, m_end in matched_spans):
+                continue
+
+            candidate = match.group(1)
+            # Skip obvious common placeholder/dummy strings
+            if any(candidate.lower().startswith(p) for p in ["example", "placeholder", "your_", "xxxx"]):
+                continue
+
+            entropy = shannon_entropy(candidate)
+            # High entropy threshold for secrets (typically > 4.5 for alphanumeric strings)
+            if entropy >= 4.5 and len(candidate) >= 16:
+                matched_spans.add(span)
+                findings.append({
+                    "category": "hardcoded_secret",
+                    "label": f"High Entropy Secret (entropy: {entropy:.2f})",
+                    "file": str(file.relative_to(repo_path)),
+                    "match_preview": candidate[:6] + "...(masked)",
+                    "raw_severity": "high",
+                })
+
+    return findings
 
 def scan_secrets(repo_path: Path) -> list[dict]:
     findings = []
