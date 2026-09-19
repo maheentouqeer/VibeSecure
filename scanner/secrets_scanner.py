@@ -18,6 +18,29 @@ PATTERNS = {
 }
 
 SKIP_DIRS = {".git", "node_modules", "dist", "build", "__pycache__", ".next"}
+
+# Lockfiles and minified bundles are wall-to-wall integrity hashes that look
+# exactly like high-entropy secrets; they are never where a human put a secret.
+SKIP_FILES = {
+    "package-lock.json", "yarn.lock", "pnpm-lock.yaml",
+    "npm-shrinkwrap.json", "composer.lock", "poetry.lock",
+}
+SKIP_SUFFIXES = (".min.js", ".min.css", ".map", ".lock")
+
+# Strings that are hashes/checksums/ids, not credentials.
+_HASH_PREFIXES = ("sha1-", "sha256-", "sha384-", "sha512-", "md5-")
+_HEX_ONLY = re.compile(r"^[0-9a-fA-F]{32,}$")
+_UUID = re.compile(r"^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$")
+
+
+def _looks_like_hash_or_id(candidate: str) -> bool:
+    return (
+        candidate.lower().startswith(_HASH_PREFIXES)
+        or bool(_HEX_ONLY.match(candidate))
+        or bool(_UUID.match(candidate))
+    )
+
+
 TEXT_EXTS = {".js", ".ts", ".tsx", ".jsx", ".py", ".env", ".json", ".yml", ".yaml", ".md", ".txt"}
 
 # Candidate string match for entropy analysis (e.g., quotes or assignments).
@@ -48,6 +71,8 @@ def scan_secrets(repo_path: Path) -> list[dict]:
             continue
         if file.suffix not in TEXT_EXTS and file.name != ".env":
             continue
+        if file.name in SKIP_FILES or file.name.endswith(SKIP_SUFFIXES):
+            continue
         try:
             text = file.read_text(errors="ignore")
         except Exception:
@@ -62,7 +87,7 @@ def scan_secrets(repo_path: Path) -> list[dict]:
                 findings.append({
                     "category": "hardcoded_secret",
                     "label": label,
-                    "file": str(file.relative_to(repo_path)),
+                    "file": file.relative_to(repo_path).as_posix(),
                     "match_preview": match.group(0)[:6] + "...(masked)",
                     "raw_severity": "critical",
                 })
@@ -78,6 +103,8 @@ def scan_secrets(repo_path: Path) -> list[dict]:
             # Skip obvious common placeholder/dummy strings
             if any(candidate.lower().startswith(p) for p in ["example", "placeholder", "your_", "xxxx"]):
                 continue
+            if _looks_like_hash_or_id(candidate):
+                continue
 
             entropy = shannon_entropy(candidate)
             # High entropy threshold for secrets (typically > 4.5 for alphanumeric strings)
@@ -86,7 +113,7 @@ def scan_secrets(repo_path: Path) -> list[dict]:
                 findings.append({
                     "category": "hardcoded_secret",
                     "label": f"High Entropy Secret (entropy: {entropy:.2f})",
-                    "file": str(file.relative_to(repo_path)),
+                    "file": file.relative_to(repo_path).as_posix(),
                     "match_preview": candidate[:6] + "...(masked)",
                     "raw_severity": "high",
                 })

@@ -44,6 +44,7 @@ export interface ApiScan {
   platform: string;
   status: string;
   created_at: string;
+  error: string | null;
   findings: ApiFinding[];
 }
 
@@ -67,14 +68,57 @@ async function apiFetch(path: string, init: RequestInit = {}, signal?: AbortSign
   return res.json();
 }
 
-export function createScan(target: string, signal?: AbortSignal): Promise<ApiScan> {
-  return apiFetch("/scans", { method: "POST", body: JSON.stringify({ target }) }, signal);
+const POLL_INTERVAL_MS = 1500;
+const MAX_WAIT_MS = 10 * 60 * 1000;
+
+function sleep(ms: number, signal?: AbortSignal): Promise<void> {
+  return new Promise((resolve, reject) => {
+    if (signal?.aborted) return reject(new DOMException("Aborted", "AbortError"));
+    const timer = setTimeout(resolve, ms);
+    signal?.addEventListener(
+      "abort",
+      () => {
+        clearTimeout(timer);
+        reject(new DOMException("Aborted", "AbortError"));
+      },
+      { once: true }
+    );
+  });
 }
 
-export function rescanScan(scanId: string, signal?: AbortSignal): Promise<ApiScan> {
-  return apiFetch(`/scans/${scanId}/rescan`, { method: "POST" }, signal);
+// POST /scans and /rescan only queue a background job; poll until it finishes
+// so callers still get one finished scan back.
+async function waitForScan(scanId: string, signal?: AbortSignal): Promise<ApiScan> {
+  const deadline = Date.now() + MAX_WAIT_MS;
+  for (;;) {
+    const scan = await getScan(scanId, signal);
+    if (scan.status !== "queued" && scan.status !== "running") {
+      if (scan.error) throw new ApiError(scan.error);
+      return scan;
+    }
+    if (Date.now() > deadline) throw new ApiError("The scan is taking too long. Please try again.");
+    await sleep(POLL_INTERVAL_MS, signal);
+  }
+}
+
+export async function createScan(target: string, signal?: AbortSignal): Promise<ApiScan> {
+  const queued = await apiFetch("/scans", { method: "POST", body: JSON.stringify({ target }) }, signal);
+  return waitForScan(queued.id, signal);
+}
+
+export async function rescanScan(scanId: string, signal?: AbortSignal): Promise<ApiScan> {
+  await apiFetch(`/scans/${scanId}/rescan`, { method: "POST" }, signal);
+  return waitForScan(scanId, signal);
 }
 
 export function getScan(scanId: string, signal?: AbortSignal): Promise<ApiScan> {
   return apiFetch(`/scans/${scanId}`, {}, signal);
+}
+
+export async function listScans(signal?: AbortSignal): Promise<ApiScan[]> {
+  const token = getOwnerToken();
+  if (!token) return [];
+  const res = await fetch(`${API_URL}/scans`, { headers: { "X-Owner-Token": token }, signal });
+  if (!res.ok) return [];
+  return res.json();
 }

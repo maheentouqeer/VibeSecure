@@ -6,10 +6,26 @@ need to write these rules yourself. Requires `pip install semgrep`.
 """
 import json
 import logging
+import os
 import subprocess
 from pathlib import Path
 
 logger = logging.getLogger(__name__)
+
+
+def _relative_path(path: str, repo_path: Path) -> str:
+    """Semgrep reports paths that may not share a prefix with repo_path
+    (symlinked temp dirs such as /var vs /private/var on macOS, or Windows
+    short names); a plain relative_to() would raise and abort the scan."""
+    if not path:
+        return ""
+    try:
+        return Path(path).resolve().relative_to(repo_path.resolve()).as_posix()
+    except (ValueError, OSError):
+        try:
+            return Path(os.path.relpath(path, repo_path)).as_posix()
+        except ValueError:
+            return path
 
 
 def run_semgrep(repo_path: Path) -> list[dict]:
@@ -47,7 +63,7 @@ def run_semgrep(repo_path: Path) -> list[dict]:
         findings.append({
             "category": "static_analysis",
             "label": r.get("check_id", "unknown_rule"),
-            "file": str(Path(r["path"]).relative_to(repo_path)) if r.get("path") else "",
+            "file": _relative_path(r.get("path", ""), repo_path),
             "line": r.get("start", {}).get("line") or 0,
             "message": r.get("extra", {}).get("message", ""),
             "raw_severity": r.get("extra", {}).get("severity", "medium").lower(),

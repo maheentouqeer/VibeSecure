@@ -23,7 +23,7 @@ import {
   AlertTriangle,
 } from "lucide-react";
 
-import { createScan, rescanScan, ApiError, type ApiScan, type ApiFinding } from "@/lib/api";
+import { API_URL, createScan, rescanScan, listScans, ApiError, type ApiScan, type ApiFinding } from "@/lib/api";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -826,8 +826,8 @@ function BadgeScreen({
   const t = getTheme(isDark);
   if (!activeScan) return null;
 
-  const shareLink = `https://secure-vibecode.dev/badge/${activeScan.id}`;
-  const embedCode = `<a href="${shareLink}"><img src="${shareLink}.svg" alt="Secure-VibeCode Verified" /></a>`;
+  const shareLink = `${API_URL}/badge/${activeScan.id}.svg`;
+  const embedCode = `<img src="${shareLink}" alt="Secure-VibeCode Verified" />`;
 
   return (
     <main className="mx-auto max-w-lg px-6 pb-24 pt-16 text-center">
@@ -1017,6 +1017,21 @@ export default function SecureVibeCodeApp() {
       if (intervalRef.current) clearInterval(intervalRef.current);
       abortRef.current?.abort();
     };
+  }, []);
+
+  // Restore past scans for a returning visitor (matched by their owner token).
+  useEffect(() => {
+    const controller = new AbortController();
+    listScans(controller.signal)
+      .then((apiScans) => {
+        const past = apiScans.filter((s) => s.status === "completed").map(mapScan);
+        setScans((prev) => {
+          const known = new Set(prev.map((s) => s.id));
+          return [...prev, ...past.filter((s) => !known.has(s.id))];
+        });
+      })
+      .catch(() => {});
+    return () => controller.abort();
   }, []);
 
   // Drives the decorative step/progress animation shown *while* the real

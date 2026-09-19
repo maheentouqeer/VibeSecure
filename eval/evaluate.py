@@ -28,7 +28,7 @@ def _check_static_cors(repo_dir: Path) -> list[dict]:
             findings.append({
                 "category": "cors_misconfig",
                 "label": "CORS allows any origin (*)",
-                "file": str(file.relative_to(repo_dir)),
+                "file": file.relative_to(repo_dir).as_posix(),
                 "raw_severity": "high",
             })
     return findings
@@ -77,6 +77,10 @@ def evaluate_repo(spec: TestRepoSpec, repo_dir: Path) -> dict[str, Any]:
         actual_findings.extend(run_semgrep(repo_dir))
     except Exception:
         pass  # Fallback if Semgrep isn't installed locally
+
+    # scan_incomplete means a scanner was unavailable (e.g. no Semgrep on
+    # Windows); it is an operational notice, not a detection to be scored.
+    actual_findings = [f for f in actual_findings if f.get("category") != "scan_incomplete"]
 
     expected = spec["expected_findings"]
     matched_actual_indices = set()

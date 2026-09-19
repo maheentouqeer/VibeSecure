@@ -87,5 +87,13 @@ def clone_repo(github_url: str) -> Path:
             shutil.rmtree(askpass_dir, ignore_errors=True)
 
 
+def head_commit(path: Path) -> str | None:
+    """Full SHA of the checked-out HEAD, or None if it can't be read."""
+    try:
+        return git.Repo(path).head.commit.hexsha
+    except Exception:
+        return None
+
+
 def cleanup(path: Path) -> None:
     shutil.rmtree(path, ignore_errors=True)

@@ -6,7 +6,8 @@ Two entry points everyone else builds against:
 """
 from pathlib import Path
 
-from scanner.repo_utils import clone_repo, cleanup
+from scanner.repo_utils import clone_repo, cleanup, head_commit
+from scanner.url_safety import assert_public_url
 from scanner.platform_detector import detect_platform, is_supabase_project
 from scanner.secrets_scanner import scan_secrets
 from scanner.code_scanner import run_semgrep
@@ -34,24 +35,45 @@ def _looks_like_repo_target(target: str) -> bool:
     return False
 
 
-def _run_repo_scan(target: str) -> tuple[list[dict], str]:
-    """Clones target and runs the source-level scanners against it.
-    Raises if target isn't actually a clonable git repo -- callers
-    decide what to do with that (see run_full_scan)."""
+def scan_path(repo_path: Path) -> tuple[list[dict], str]:
+    """Runs the source-level scanners against an already-local directory.
+    Shared by the clone-based scan and the MCP local-workspace mode."""
     raw_findings: list[dict] = []
-    repo_path = clone_repo(target)
-    try:
-        platform = detect_platform(repo_path)
-        raw_findings += scan_secrets(repo_path)
-        raw_findings += run_semgrep(repo_path)
-        if is_supabase_project(repo_path):
-            raw_findings += check_rls(repo_path)
-    finally:
-        cleanup(repo_path)
+    platform = detect_platform(repo_path)
+    raw_findings += scan_secrets(repo_path)
+    raw_findings += run_semgrep(repo_path)
+    if is_supabase_project(repo_path):
+        raw_findings += check_rls(repo_path)
     return raw_findings, platform
 
 
-def run_full_scan(target: str) -> dict:
+def enrich(raw_findings: list[dict], platform: str) -> list[dict]:
+    """Triage, explain, and write a fix prompt for each raw finding."""
+    enriched = []
+    for finding in triage(raw_findings):
+        explanation = explain(finding)
+        fix_prompt = generate_fix_prompt(finding, platform)
+        enriched.append({**finding, **explanation, "fix_prompt": fix_prompt})
+    return enriched
+
+
+def _run_repo_scan(target: str, unchanged_since: str | None = None):
+    """Clones target and scans it. Returns (raw_findings, platform, commit_sha),
+    or (None, None, commit_sha) when the checked-out commit equals
+    `unchanged_since` and the scan work was skipped. Raises if target isn't
+    actually a clonable git repo -- callers decide what to do with that."""
+    repo_path = clone_repo(target)
+    try:
+        commit_sha = head_commit(repo_path)
+        if unchanged_since and commit_sha == unchanged_since:
+            return None, None, commit_sha
+        raw_findings, platform = scan_path(repo_path)
+    finally:
+        cleanup(repo_path)
+    return raw_findings, platform, commit_sha
+
+
+def run_full_scan(target: str, unchanged_since: str | None = None) -> dict:
     """target: a repo URL (GitHub, GitLab, Bitbucket, or any other git
     host reachable over HTTPS) or a live deployed app URL.
 
@@ -65,25 +87,33 @@ def run_full_scan(target: str) -> dict:
     Anything else is ambiguous, so we try cloning it anyway -- this
     covers unrecognized git hosts -- and only fall back to a live-URL
     scan once cloning has actually failed, rather than guessing upfront.
+
+    If `unchanged_since` is the commit SHA of a previous scan and the repo
+    is still at that commit, the expensive scanner and LLM work is skipped
+    and the result has "unchanged": True with no findings.
     """
+    assert_public_url(target)
+
+    commit_sha = None
     if _looks_like_repo_target(target):
-        raw_findings, platform = _run_repo_scan(target)
+        raw_findings, platform, commit_sha = _run_repo_scan(target, unchanged_since)
     else:
         try:
-            raw_findings, platform = _run_repo_scan(target)
+            raw_findings, platform, commit_sha = _run_repo_scan(target, unchanged_since)
         except Exception:
             raw_findings = scan_live_url(target)
             platform = "generic"
 
-    triaged = triage(raw_findings)
+    if raw_findings is None:
+        return {"target": target, "platform": None, "findings": [], "commit_sha": commit_sha, "unchanged": True}
 
-    enriched = []
-    for finding in triaged:
-        explanation = explain(finding)
-        fix_prompt = generate_fix_prompt(finding, platform)
-        enriched.append({**finding, **explanation, "fix_prompt": fix_prompt})
-
-    return {"target": target, "platform": platform, "findings": enriched}
+    return {
+        "target": target,
+        "platform": platform,
+        "findings": enrich(raw_findings, platform),
+        "commit_sha": commit_sha,
+        "unchanged": False,
+    }
 
 
 def rescan(target: str, previous_findings: list[dict]) -> list[dict]:

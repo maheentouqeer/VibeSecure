@@ -50,6 +50,7 @@ class ScanResponse(BaseModel):
     platform: str
     status: str
     created_at: datetime
+    error: str | None = None
     findings: list[Finding] = []
 
 

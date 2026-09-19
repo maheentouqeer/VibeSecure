@@ -139,3 +139,40 @@ def test_verify_diff_findings():
     assert len(diffed) == 2
     assert diffed[0]["status"] == "still_present"
     assert diffed[1]["status"] == "resolved"
+
+
+def test_fingerprint_ignores_volatile_entropy_value_in_label():
+    from agents.verify_agent import fingerprint
+
+    a = {"category": "hardcoded_secret", "label": "High Entropy Secret (entropy: 4.71)", "file": "src/a.ts"}
+    b = {"category": "hardcoded_secret", "label": "High Entropy Secret (entropy: 5.02)", "file": "src/a.ts"}
+    other_file = {**a, "file": "src/b.ts"}
+    assert fingerprint(a) == fingerprint(b)
+    assert fingerprint(a) != fingerprint(other_file)
+
+
+def test_fingerprint_distinguishes_tables_and_path_separators():
+    from agents.verify_agent import fingerprint
+
+    base = {"category": "missing_access_control", "label": "Row-Level Security not enabled", "file": "supabase migrations"}
+    assert fingerprint({**base, "table": "users"}) != fingerprint({**base, "table": "orders"})
+    windows_style = {"category": "c", "label": "l", "file": "src" + chr(92) + "a.ts"}
+    assert fingerprint(windows_style) == fingerprint({"category": "c", "label": "l", "file": "src/a.ts"})
+
+
+def test_diff_findings_treats_changed_entropy_as_still_present():
+    prev = [{"category": "hardcoded_secret", "label": "High Entropy Secret (entropy: 4.71)", "file": "a.ts"}]
+    curr = [{"category": "hardcoded_secret", "label": "High Entropy Secret (entropy: 4.90)", "file": "a.ts"}]
+    assert diff_findings(prev, curr)[0]["status"] == "still_present"
+
+
+def test_fallback_triage_keeps_findings_for_different_tables():
+    from agents.triage_agent import _fallback_triage
+
+    raw = [
+        {"category": "missing_access_control", "label": "Row-Level Security not enabled",
+         "file": "supabase migrations", "table": t, "raw_severity": "critical"}
+        for t in ("users", "orders")
+    ]
+    out = _fallback_triage(raw + raw)  # exact duplicates still collapse
+    assert sorted(f["table"] for f in out) == ["orders", "users"]

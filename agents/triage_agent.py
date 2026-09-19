@@ -32,7 +32,7 @@ def _fallback_triage(raw_findings: list[dict[str, Any]]) -> list[dict[str, Any]]
         cat = f.get("category", "unknown")
         label = f.get("label", "Unlabeled finding")
         file_path = f.get("file", "")
-        dedupe_key = (cat, label, file_path)
+        dedupe_key = (cat, label, file_path, f.get("table"))
         if dedupe_key in seen:
             continue
         seen.add(dedupe_key)

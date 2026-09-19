@@ -58,6 +58,11 @@ class Scan(Base):
     # this value is treated as the scan's owner. Set explicitly at creation
     # time in backend/main.py, never exposed in ScanResponse.
     owner_token: Mapped[str] = mapped_column(String, nullable=False)
+    # Set when a scan or rescan job fails; cleared when a new job starts.
+    error: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # Commit the last completed scan saw (repo targets only); lets a rescan of
+    # an unchanged commit skip the scanners and LLM calls entirely.
+    commit_sha: Mapped[str | None] = mapped_column(String, nullable=True)
 
     findings: Mapped[list["Finding"]] = relationship(
         back_populates="scan", cascade="all, delete-orphan"
@@ -78,14 +83,49 @@ class Finding(Base):
     why_it_matters: Mapped[str] = mapped_column(Text, nullable=False)
     fix_prompt: Mapped[str] = mapped_column(Text, nullable=False)
     status: Mapped[str] = mapped_column(String, nullable=False, default="open")
+    # Stable cross-scan identity (see agents.verify_agent.fingerprint); null on
+    # rows saved before this column existed.
+    fingerprint: Mapped[str | None] = mapped_column(String, nullable=True, index=True)
 
     scan: Mapped["Scan"] = relationship(back_populates="findings")
 
 
+class ScanRun(Base):
+    """One row per scan or rescan job started -- the source of truth for the
+    daily spend cap (and, later, per-account usage metering)."""
+
+    __tablename__ = "scan_runs"
+
+    id: Mapped[str] = mapped_column(String, primary_key=True, default=_uuid)
+    scan_id: Mapped[str] = mapped_column(ForeignKey("scans.id"), nullable=False)
+    kind: Mapped[str] = mapped_column(String, nullable=False)  # "scan" | "rescan"
+    started_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=_now, nullable=False, index=True
+    )
+
+
 def init_db() -> None:
-    """Create all tables if they don't already exist. Fast-path for a demo;
-    swap for Alembic migrations once the schema needs to evolve post-hackathon."""
-    Base.metadata.create_all(bind=engine)
+    """Bring the database to the latest Alembic revision.
+
+    A database created earlier by create_all() has tables but no
+    alembic_version table; it is stamped at head instead of re-created.
+    Schema changes go in a new file under alembic/versions/, never by
+    editing an applied migration."""
+    from pathlib import Path
+
+    from alembic import command
+    from alembic.config import Config
+    from sqlalchemy import inspect
+
+    root = Path(__file__).resolve().parent.parent
+    cfg = Config(str(root / "alembic.ini"))
+    cfg.set_main_option("script_location", str(root / "alembic"))
+
+    tables = inspect(engine).get_table_names()
+    if "scans" in tables and "alembic_version" not in tables:
+        command.stamp(cfg, "head")
+    else:
+        command.upgrade(cfg, "head")
 
 
 def get_db():
