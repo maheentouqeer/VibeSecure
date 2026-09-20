@@ -2,6 +2,7 @@
 import os
 import shutil
 import tempfile
+from urllib.parse import urlparse
 from pathlib import Path
 
 import git
@@ -33,22 +34,34 @@ def _github_token() -> str | None:
 
 
 def _is_github_url(url: str) -> bool:
-    return "github.com/" in url.lower()
+    """True only when the URL's host is github.com itself. A substring test
+    would also match https://evil.example/github.com/x.git, handing the
+    credential to whoever runs that host."""
+    try:
+        host = urlparse(url).hostname
+    except ValueError:
+        return False
+    return host in ("github.com", "www.github.com")
 
 
-def clone_repo(github_url: str) -> Path:
+is_github_url = _is_github_url
+
+
+def clone_repo(github_url: str, token: str | None = None) -> Path:
     """Clone a repository to a temporary directory.
 
     Public repositories work without credentials. For private GitHub
-    repositories, an optional backend environment token is supplied through
-    Git's askpass mechanism rather than embedding the token in the URL.
+    repositories a token is supplied through Git's askpass mechanism rather
+    than embedding it in the URL: the explicit `token` argument (a user's own
+    connected GitHub account) wins over the server-wide environment token.
+    Credentials are only ever offered to github.com.
     """
     tmp_dir = Path(tempfile.mkdtemp(prefix="svc_scan_"))
     askpass_dir: Path | None = None
 
     try:
         clone_env = os.environ.copy()
-        token = _github_token() if _is_github_url(github_url) else None
+        token = (token or _github_token()) if _is_github_url(github_url) else None
 
         if token:
             # Git invokes this helper when it needs HTTP credentials. The
