@@ -242,6 +242,9 @@ def _housekeeping() -> None:
 
     with db.SessionLocal() as session:
         purge_finished(session)
+    from backend import limits
+
+    limits.db_store.purge()
     days = int(_float_env("ANON_SCAN_RETENTION_DAYS", 0))
     if days > 0:
         with db.SessionLocal() as session:

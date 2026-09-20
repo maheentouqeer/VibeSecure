@@ -39,12 +39,14 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Response
 from fastapi.responses import RedirectResponse
 from sqlalchemy.orm import Session
 
-from backend import db, plans
+from backend import db, limits, plans
 from backend.auth import Actor, get_actor, require_user
 from scanner.repo_utils import is_github_url
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/integrations/github")
+
+_oauth_limit = Depends(limits.limit_by_ip("oauth", "OAUTH_RATE_LIMIT_PER_HOUR", 30, "connection attempts"))
 
 AUTHORIZE_URL = "https://github.com/login/oauth/authorize"
 TOKEN_URL = "https://github.com/login/oauth/access_token"
@@ -186,7 +188,7 @@ def status(actor: Actor = Depends(get_actor), session: Session = Depends(db.get_
     return {"configured": configured(), "connected": conn is not None, "login": conn.github_login if conn else None}
 
 
-@router.get("/authorize")
+@router.get("/authorize", dependencies=[_oauth_limit])
 def authorize(user: db.User = Depends(require_user)):
     _require_configured()
     query = urlencode(
@@ -208,7 +210,7 @@ def _finish(result: str):
     return {"github": result}
 
 
-@router.get("/callback")
+@router.get("/callback", dependencies=[_oauth_limit])
 def callback(
     state: str = Query(...),
     code: str | None = Query(default=None),

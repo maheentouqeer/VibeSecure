@@ -25,11 +25,14 @@ from sqlalchemy import update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, selectinload
 
-from backend import db, deletion, github_oauth, plans
+from backend import db, deletion, github_oauth, limits, plans
 from backend.access import ADMIN_ROLES, Actor, org_role, scan_owner_clause
 from backend.auth import get_actor, require_user
 
 router = APIRouter()
+
+# Org changes and deletions are throttled per user so a script (or a stolen token) can't churn them.
+_mutation_limit = Depends(limits.limit_by_user("mutation", "MUTATION_RATE_LIMIT_PER_HOUR", 120, "changes"))
 
 
 # --- /me -------------------------------------------------------------------
@@ -85,7 +88,7 @@ def claim_anonymous_scans(
     return {"claimed": claimed}
 
 
-@router.delete("/me", status_code=204)
+@router.delete("/me", status_code=204, dependencies=[_mutation_limit])
 def delete_my_account(user: db.User = Depends(require_user), session: Session = Depends(db.get_db)):
     """Permanently deletes the account and all its scans. Refused (409) while
     there is an active subscription, a running scan, or an organization with
@@ -124,7 +127,7 @@ def _require_org_admin(session: Session, user: db.User, org_id: str) -> str:
     return role
 
 
-@router.post("/orgs", status_code=201)
+@router.post("/orgs", status_code=201, dependencies=[_mutation_limit])
 def create_org(payload: OrgCreate, user: db.User = Depends(require_user), session: Session = Depends(db.get_db)):
     org = db.Organization(name=payload.name.strip(), owner_user_id=user.id)
     session.add(org)
@@ -149,14 +152,16 @@ def list_orgs(user: db.User = Depends(require_user), session: Session = Depends(
     return out
 
 
-@router.post("/orgs/{org_id}/members", status_code=201)
+@router.post("/orgs/{org_id}/members", status_code=201, dependencies=[_mutation_limit])
 def add_member(
     org_id: str,
     payload: MemberAdd,
     user: db.User = Depends(require_user),
     session: Session = Depends(db.get_db),
 ):
-    _require_org_admin(session, user, org_id)
+    caller_role = _require_org_admin(session, user, org_id)
+    if payload.role == "admin" and caller_role != "owner":
+        raise HTTPException(status_code=403, detail="Only the organization owner can add admins.")
 
     email = payload.email.strip().lower()
     target = session.query(db.User).filter(db.User.email.ilike(email)).first()
@@ -185,7 +190,7 @@ def add_member(
     return {"user_id": target.id, "email": target.email, "role": payload.role}
 
 
-@router.delete("/orgs/{org_id}/members/{member_user_id}", status_code=204)
+@router.delete("/orgs/{org_id}/members/{member_user_id}", status_code=204, dependencies=[_mutation_limit])
 def remove_member(
     org_id: str,
     member_user_id: str,
@@ -203,12 +208,93 @@ def remove_member(
         raise HTTPException(status_code=404, detail="Member not found")
     if membership.role == "owner":
         raise HTTPException(status_code=400, detail="The organization owner cannot be removed.")
+    if membership.role == "admin" and member_user_id != user.id and caller_role != "owner":
+        raise HTTPException(status_code=403, detail="Only the organization owner can remove admins.")
     session.delete(membership)
     session.commit()
     return Response(status_code=204)
 
 
-@router.delete("/orgs/{org_id}", status_code=204)
+class RoleChange(BaseModel):
+    role: Literal["member", "admin"]
+
+
+class OwnershipTransfer(BaseModel):
+    user_id: str = Field(..., min_length=1)
+
+
+@router.patch("/orgs/{org_id}/members/{member_user_id}", dependencies=[_mutation_limit])
+def change_member_role(
+    org_id: str,
+    member_user_id: str,
+    payload: RoleChange,
+    user: db.User = Depends(require_user),
+    session: Session = Depends(db.get_db),
+):
+    """Owner only: promote a member to admin or demote an admin to member.
+    Ownership itself only moves through /transfer."""
+    role = org_role(session, user, org_id)
+    if role is None:
+        raise HTTPException(status_code=404, detail="Organization not found")
+    if role != "owner":
+        raise HTTPException(status_code=403, detail="Only the organization owner can change roles.")
+
+    membership = session.query(db.Membership).filter_by(user_id=member_user_id, org_id=org_id).one_or_none()
+    if membership is None:
+        raise HTTPException(status_code=404, detail="Member not found")
+    if membership.role == "owner":
+        raise HTTPException(status_code=400, detail="The owner's role can only change by transferring ownership.")
+    membership.role = payload.role
+    session.commit()
+    return {"user_id": member_user_id, "role": payload.role}
+
+
+@router.post("/orgs/{org_id}/transfer", dependencies=[_mutation_limit])
+def transfer_ownership(
+    org_id: str,
+    payload: OwnershipTransfer,
+    user: db.User = Depends(require_user),
+    session: Session = Depends(db.get_db),
+):
+    """Owner only: hand the organization to another member. The previous
+    owner becomes an admin. Each step is a conditional UPDATE, so of two
+    simultaneous transfers only the one from the current owner can succeed."""
+    role = org_role(session, user, org_id)
+    if role is None:
+        raise HTTPException(status_code=404, detail="Organization not found")
+    if role != "owner":
+        raise HTTPException(status_code=403, detail="Only the organization owner can transfer ownership.")
+    if payload.user_id == user.id:
+        raise HTTPException(status_code=400, detail="You already own this organization.")
+
+    demoted = session.execute(
+        update(db.Membership)
+        .where(db.Membership.org_id == org_id, db.Membership.user_id == user.id, db.Membership.role == "owner")
+        .values(role="admin")
+    ).rowcount
+    if demoted != 1:  # ownership moved under us
+        session.rollback()
+        raise HTTPException(status_code=403, detail="Only the organization owner can transfer ownership.")
+
+    promoted = session.execute(
+        update(db.Membership)
+        .where(
+            db.Membership.org_id == org_id,
+            db.Membership.user_id == payload.user_id,
+            db.Membership.role.in_(("member", "admin")),
+        )
+        .values(role="owner")
+    ).rowcount
+    if promoted != 1:
+        session.rollback()  # also undoes the demotion above
+        raise HTTPException(status_code=404, detail="That user is not a member of this organization.")
+
+    session.execute(update(db.Organization).where(db.Organization.id == org_id).values(owner_user_id=payload.user_id))
+    session.commit()
+    return {"org_id": org_id, "owner_user_id": payload.user_id, "previous_owner_role": "admin"}
+
+
+@router.delete("/orgs/{org_id}", status_code=204, dependencies=[_mutation_limit])
 def delete_org(org_id: str, user: db.User = Depends(require_user), session: Session = Depends(db.get_db)):
     """Owner only. Members keep their scans; they are just no longer filed
     under the organization."""
@@ -323,9 +409,11 @@ async def billing_webhook(
     if not secret:
         raise HTTPException(status_code=503, detail="Billing webhooks are not configured.")
 
+    limits.webhook_gate(request)
     body = await request.body()
     expected = "sha256=" + hmac.new(secret.encode(), body, hashlib.sha256).hexdigest()
     if not x_billing_signature or not hmac.compare_digest(expected, x_billing_signature):
+        limits.webhook_failed(request)
         raise HTTPException(status_code=401, detail="Invalid signature.")
 
     try:

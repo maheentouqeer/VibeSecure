@@ -26,7 +26,7 @@ from sqlalchemy import update
 from sqlalchemy.orm import Session
 
 from agents.verify_agent import fingerprint
-from backend import accounts, badge, db, deletion, github_oauth, jobs, limits, plans, schemas, whop
+from backend import accounts, admin, badge, db, deletion, github_oauth, health, jobs, limits, plans, schemas, whop
 from backend.access import Actor, get_scan_or_404, org_role, scan_owner_clause
 from backend.auth import get_actor
 from orchestrator import run_full_scan
@@ -110,6 +110,8 @@ app.add_middleware(
 app.include_router(accounts.router)
 app.include_router(github_oauth.router)
 app.include_router(whop.router)
+app.include_router(health.router)
+app.include_router(admin.router)
 
 
 def _save_findings(session: Session, scan: db.Scan, raw_findings: list[dict]) -> None:
@@ -349,7 +351,11 @@ def get_scan(
     return get_scan_or_404(session, scan_id, actor, allow_org_admin=True)
 
 
-@app.delete("/scans/{scan_id}", status_code=204)
+@app.delete(
+    "/scans/{scan_id}",
+    status_code=204,
+    dependencies=[Depends(limits.limit_by_user("mutation", "MUTATION_RATE_LIMIT_PER_HOUR", 120, "changes"))],
+)
 def delete_scan(
     scan_id: str,
     session: Session = Depends(db.get_db),
@@ -468,9 +474,11 @@ async def github_webhook(
     if not secret:
         raise HTTPException(status_code=503, detail="Webhooks are not configured.")
 
+    limits.webhook_gate(request)
     body = await request.body()
     expected = "sha256=" + hmac.new(secret.encode(), body, hashlib.sha256).hexdigest()
     if not x_hub_signature_256 or not hmac.compare_digest(expected, x_hub_signature_256):
+        limits.webhook_failed(request)
         raise HTTPException(status_code=401, detail="Invalid signature.")
 
     if x_github_event == "ping":

@@ -36,7 +36,7 @@ from typing import Mapping
 from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy.orm import Session
 
-from backend import db
+from backend import db, limits
 from backend.accounts import BillingEvent, BillingUser, apply_billing_event
 
 logger = logging.getLogger(__name__)
@@ -165,8 +165,10 @@ async def whop_webhook(request: Request, session: Session = Depends(db.get_db)):
     if not secret:
         raise HTTPException(status_code=503, detail="Whop webhooks are not configured.")
 
+    limits.webhook_gate(request)
     body = await request.body()
     if not verify_signature(body, request.headers, secret):
+        limits.webhook_failed(request)
         raise HTTPException(status_code=401, detail="Invalid signature.")
 
     try:
