@@ -26,7 +26,7 @@ from sqlalchemy import update
 from sqlalchemy.orm import Session
 
 from agents.verify_agent import fingerprint
-from backend import accounts, admin, badge, db, deletion, github_oauth, health, jobs, limits, plans, schemas, whop
+from backend import accounts, admin, badge, billing, db, deletion, github_oauth, health, jobs, limits, plans, schemas, whop
 from backend.access import Actor, get_scan_or_404, org_role, scan_owner_clause
 from backend.auth import get_actor
 from orchestrator import run_full_scan
@@ -112,6 +112,7 @@ app.include_router(github_oauth.router)
 app.include_router(whop.router)
 app.include_router(health.router)
 app.include_router(admin.router)
+app.include_router(billing.router)
 
 
 def _save_findings(session: Session, scan: db.Scan, raw_findings: list[dict]) -> None:

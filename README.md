@@ -162,7 +162,7 @@ Open [http://localhost:3000](http://localhost:3000) in your web browser.
 
 - **Async scans:** `POST /scans` and `POST /scans/{id}/rescan` return `202` immediately; poll `GET /scans/{id}` until `status` is `completed` or `failed` (`error` holds the reason). A rescan already in progress returns `409`.
 - **Limits:** `SCAN_RATE_LIMIT_PER_HOUR` (per client IP, `429`) and `DAILY_SCAN_CAP` (global per UTC day, `503`). Set either to `0` to disable. Other endpoints are throttled too (GitHub connect, org changes and deletions, and bad webhook signatures; see `.env.example`). Hits are counted in the database (`RATE_LIMIT_STORE=db`, the default), so the limits are exact across instances and survive restarts; `RATE_LIMIT_STORE=memory` keeps them per process.
-- **Target safety:** private, loopback, and link-local addresses are refused (SSRF guard). Set `ALLOW_PRIVATE_TARGETS=1` for local development only.
+- **Target safety:** private, loopback, link-local and internal addresses are refused (SSRF guard), including IPv4 addresses hidden inside IPv6 ones. Addresses are validated on the socket that actually connects, so DNS rebinding can't redirect a fetch inward, and `git clone` is pinned to the validated addresses (needs git 2.37+). Set `ALLOW_PRIVATE_TARGETS=1` for local development only.
 - **Migrations:** Alembic runs automatically at startup. After editing models in `backend/db.py`, run `alembic revision --autogenerate -m "message"` and commit the new file (see `migration_db.txt`).
 - **Badge:** `GET /badge/{scan_id}.svg` is public and shows only verified / not verified.
 - **Monitoring:** set `SENTRY_DSN` to enable Sentry (off by default).
@@ -182,6 +182,10 @@ Everything works anonymously out of the box. To add real accounts:
 - **Teams:** `POST /orgs`, `GET /orgs`, `POST /orgs/{id}/members` (the person must have signed in once), `DELETE /orgs/{id}/members/{user_id}`. Pass `org_id` to `POST /scans` to file a scan under an organization. Owners and admins get `GET /orgs/{id}/dashboard`: pass/fail for every member's projects (latest scan of each) and read access to those scans.
 
 ---
+
+## Checking Your Setup
+
+`python -m backend.setup_check` inspects the environment and reports what is misconfigured (`--live` adds read-only checks of Clerk and the Whop key, `--api URL` checks a running API's health, `--sentry-test` sends a test event). It never prints secrets and exits `1` on any failure. `GO_LIVE.md` is the step-by-step checklist for connecting the real services.
 
 ## Health Checks
 
@@ -229,6 +233,10 @@ Scans run through a database-backed job queue (`scan_jobs`), so they survive res
 Pro/Team users can scan their private GitHub repos through their own account. Create a GitHub OAuth App and set `GITHUB_OAUTH_CLIENT_ID`, `GITHUB_OAUTH_CLIENT_SECRET`, `GITHUB_OAUTH_REDIRECT_URI` and `TOKEN_ENCRYPTION_KEY` (see `.env.example`). Flow: `GET /integrations/github/authorize` returns the GitHub URL to send the browser to, GitHub returns to `/integrations/github/callback`, `GET /integrations/github` reports the connection, and `DELETE /integrations/github` disconnects (and revokes the grant). GitHub OAuth Apps can only read private repos with the broad `repo` scope, so users should know that is what they are granting. Tokens are stored encrypted, are only ever offered to `github.com`, and are never returned by any endpoint.
 
 > Security note: `GITHUB_TOKEN` (a server-wide token) is still honoured for cloning. Anyone who can submit a URL can then scan whatever that token can read, so only set it if that is acceptable, or leave it unset and rely on per-user connections.
+
+## Checkout
+
+`POST /billing/checkout` (signed in) with `{"plan": "pro"}` or `{"plan": "team", "org_id": "..."}` creates a Whop checkout and returns its `url` for the frontend to send the browser to. It needs `WHOP_API_KEY` and `plan_` ids in `WHOP_PLAN_MAP`. The user id (and organization id for Team) is attached to the checkout server-side, from the verified session, so a client cannot attribute a purchase to someone else; Whop copies it onto the membership and the webhook below uses it to grant the plan. Team can only be bought by the organization's owner, and existing subscribers get a `409`.
 
 ## Whop Billing
 
