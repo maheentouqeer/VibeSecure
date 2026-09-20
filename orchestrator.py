@@ -57,12 +57,12 @@ def enrich(raw_findings: list[dict], platform: str) -> list[dict]:
     return enriched
 
 
-def _run_repo_scan(target: str, unchanged_since: str | None = None):
+def _run_repo_scan(target: str, unchanged_since: str | None = None, github_token: str | None = None):
     """Clones target and scans it. Returns (raw_findings, platform, commit_sha),
     or (None, None, commit_sha) when the checked-out commit equals
     `unchanged_since` and the scan work was skipped. Raises if target isn't
     actually a clonable git repo -- callers decide what to do with that."""
-    repo_path = clone_repo(target)
+    repo_path = clone_repo(target, token=github_token)
     try:
         commit_sha = head_commit(repo_path)
         if unchanged_since and commit_sha == unchanged_since:
@@ -73,7 +73,7 @@ def _run_repo_scan(target: str, unchanged_since: str | None = None):
     return raw_findings, platform, commit_sha
 
 
-def run_full_scan(target: str, unchanged_since: str | None = None) -> dict:
+def run_full_scan(target: str, unchanged_since: str | None = None, github_token: str | None = None) -> dict:
     """target: a repo URL (GitHub, GitLab, Bitbucket, or any other git
     host reachable over HTTPS) or a live deployed app URL.
 
@@ -91,15 +91,18 @@ def run_full_scan(target: str, unchanged_since: str | None = None) -> dict:
     If `unchanged_since` is the commit SHA of a previous scan and the repo
     is still at that commit, the expensive scanner and LLM work is skipped
     and the result has "unchanged": True with no findings.
+
+    `github_token` is a user's own GitHub token for cloning their private
+    repositories; it is only ever offered to github.com (see clone_repo).
     """
     assert_public_url(target)
 
     commit_sha = None
     if _looks_like_repo_target(target):
-        raw_findings, platform, commit_sha = _run_repo_scan(target, unchanged_since)
+        raw_findings, platform, commit_sha = _run_repo_scan(target, unchanged_since, github_token)
     else:
         try:
-            raw_findings, platform, commit_sha = _run_repo_scan(target, unchanged_since)
+            raw_findings, platform, commit_sha = _run_repo_scan(target, unchanged_since, github_token)
         except Exception:
             raw_findings = scan_live_url(target)
             platform = "generic"

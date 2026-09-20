@@ -15,6 +15,7 @@ FindingStatus = Literal["open", "resolved"]
 
 class ScanCreateRequest(BaseModel):
     target: str = Field(..., min_length=1, description="GitHub repo URL or live deployed app URL")
+    org_id: str | None = Field(default=None, description="Create the scan on behalf of this organization")
 
     @field_validator("target")
     @classmethod

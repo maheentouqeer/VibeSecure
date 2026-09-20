@@ -37,7 +37,7 @@ def _offline(monkeypatch, source_repo, tmp_path):
 
     counter = {"n": 0}
 
-    def fake_clone(url):
+    def fake_clone(url, token=None):
         counter["n"] += 1
         dest = tmp_path / f"clone{counter['n']}"
         shutil.copytree(source_repo, dest)  # cleanup() deletes it, like a real clone
