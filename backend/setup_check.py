@@ -232,9 +232,42 @@ def check_tools(env) -> list[Result]:
     return out
 
 
+def check_capacity(env) -> list[Result]:
+    out = []
+    raw = env.get("SCAN_CONCURRENCY", "")
+    if raw:
+        try:
+            slots = int(raw)
+        except ValueError:
+            slots = None
+        if slots is None or slots < 1:
+            out.append(Result("WARN", "scan concurrency", f"SCAN_CONCURRENCY={raw!r} is not a positive number, so 3 is used"))
+        elif slots > 8:
+            out.append(Result("WARN", "scan concurrency", f"{slots} scans at once: each runs Semgrep, so this needs a lot of CPU and RAM. Watch memory"))
+        else:
+            out.append(Result("OK", "scan concurrency", f"{slots} scans at once per process"))
+    else:
+        out.append(Result("OK", "scan concurrency", "3 scans at once per process (default)"))
+
+    def number(name, default):
+        try:
+            return max(int(env.get(name, default)), 1)
+        except ValueError:
+            return default
+
+    total = number("DB_POOL_SIZE", 20) + number("DB_MAX_OVERFLOW", 20)
+    if total < 40:
+        out.append(Result("WARN", "db pool", f"{total} connections per process is below the 40 request threads, so requests may wait for a connection"))
+    elif total > 80:
+        out.append(Result("WARN", "db pool", f"{total} connections per process: a few API and worker processes together can exceed Postgres max_connections (default 100)"))
+    else:
+        out.append(Result("OK", "db pool", f"up to {total} connections per process"))
+    return out
+
+
 STATIC_CHECKS = (
     check_database, check_cors_and_frontend, check_clerk, check_github_oauth, check_whop,
-    check_admin_and_limits, check_secrets_hygiene, check_tools,
+    check_admin_and_limits, check_capacity, check_secrets_hygiene, check_tools,
 )
 
 

@@ -7,6 +7,7 @@ import hashlib
 import hmac
 import json
 import time
+import uuid
 from datetime import datetime, timedelta, timezone
 
 import jwt
@@ -108,7 +109,7 @@ def _add_sub(session, *, user_id=None, org_id=None, plan="pro", status="active",
     session.add(
         db.Subscription(
             user_id=user_id, org_id=org_id, provider="test", plan=plan, status=status,
-            provider_subscription_id=sid or f"sub_{time.time_ns()}", current_period_end=period_end,
+            provider_subscription_id=sid or f"sub_{uuid.uuid4().hex}", current_period_end=period_end,
         )
     )
     session.commit()

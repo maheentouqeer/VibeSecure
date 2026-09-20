@@ -160,7 +160,7 @@ Open [http://localhost:3000](http://localhost:3000) in your web browser.
 
 ## API Behavior Notes
 
-- **Async scans:** `POST /scans` and `POST /scans/{id}/rescan` return `202` immediately; poll `GET /scans/{id}` until `status` is `completed` or `failed` (`error` holds the reason). A rescan already in progress returns `409`.
+- **Async scans:** `POST /scans` and `POST /scans/{id}/rescan` return `202` immediately; poll the light `GET /scans/{id}/status` (`{id, status, error}`) until `status` is `completed` or `failed`, then fetch the full scan once with `GET /scans/{id}`. Only `SCAN_CONCURRENCY` scans (default 3) run at once per process; the rest wait as `queued`. A rescan already in progress returns `409`.
 - **Limits:** `SCAN_RATE_LIMIT_PER_HOUR` (per client IP, `429`) and `DAILY_SCAN_CAP` (global per UTC day, `503`). Set either to `0` to disable. Other endpoints are throttled too (GitHub connect, org changes and deletions, and bad webhook signatures; see `.env.example`). Hits are counted in the database (`RATE_LIMIT_STORE=db`, the default), so the limits are exact across instances and survive restarts; `RATE_LIMIT_STORE=memory` keeps them per process.
 - **Target safety:** private, loopback, link-local and internal addresses are refused (SSRF guard), including IPv4 addresses hidden inside IPv6 ones. Addresses are validated on the socket that actually connects, so DNS rebinding can't redirect a fetch inward, and `git clone` is pinned to the validated addresses (needs git 2.37+). Set `ALLOW_PRIVATE_TARGETS=1` for local development only.
 - **Migrations:** Alembic runs automatically at startup. After editing models in `backend/db.py`, run `alembic revision --autogenerate -m "message"` and commit the new file (see `migration_db.txt`).
@@ -202,6 +202,10 @@ Explanations and fix prompts are written by Google's Gemini. Before anything rea
 ## Checking Your Setup
 
 `python -m backend.setup_check` inspects the environment and reports what is misconfigured (`--live` adds read-only checks of Clerk and the Whop key, `--api URL` checks a running API's health, `--sentry-test` sends a test event). It never prints secrets and exits `1` on any failure. `GO_LIVE.md` is the step-by-step checklist for connecting the real services.
+
+## Load Testing
+
+`python -m loadtest.server` runs the API with a stub scanner and `python -m loadtest.run` ramps up concurrent users against it (see `loadtest/README.md`). On Postgres, 500 simultaneous users all got their scans (throughput is `SCAN_CONCURRENCY` divided by seconds per scan), after four capacity bugs it found were fixed. A small version runs in the normal test suite so those bugs can't come back.
 
 ## Health Checks
 

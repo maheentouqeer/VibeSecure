@@ -245,3 +245,20 @@ def test_server_github_token_states_are_described_accurately():
     limited = state(GITHUB_TOKEN="x", ALLOW_SERVER_GITHUB_TOKEN="1", SERVER_GITHUB_TOKEN_OWNERS="my-org, me")
     assert limited.status == "OK" and "my-org" in limited.detail
     assert state(GITHUB_PAT="x").status == "WARN"
+
+
+@pytest.mark.parametrize(
+    "env, name, expected",
+    [
+        ({}, "scan concurrency", "OK"),
+        ({"SCAN_CONCURRENCY": "4"}, "scan concurrency", "OK"),
+        ({"SCAN_CONCURRENCY": "20"}, "scan concurrency", "WARN"),
+        ({"SCAN_CONCURRENCY": "abc"}, "scan concurrency", "WARN"),
+        ({"SCAN_CONCURRENCY": "0"}, "scan concurrency", "WARN"),
+        ({}, "db pool", "OK"),
+        ({"DB_POOL_SIZE": "5", "DB_MAX_OVERFLOW": "5"}, "db pool", "WARN"),
+        ({"DB_POOL_SIZE": "60", "DB_MAX_OVERFLOW": "40"}, "db pool", "WARN"),
+    ],
+)
+def test_capacity_settings_are_checked(env, name, expected):
+    assert _status(run_checks(env), name) == [expected]

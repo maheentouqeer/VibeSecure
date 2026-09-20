@@ -97,6 +97,14 @@ it as a fine-grained personal access token limited to the repositories you need,
 `python -m backend.setup_check` tells you which state you are in. Prefer per-user GitHub connections for anything
 public-facing.
 
+## 4b. Size the capacity
+
+Set `SCAN_CONCURRENCY` (scans running at once per API process; default 3). Measure how long one real scan takes on your
+plan (`python run_scan.py <repo>`), then capacity is about `SCAN_CONCURRENCY / seconds per scan`, and a user waits about
+`queue length / capacity`. Semgrep is CPU and memory hungry: start near your vCPU count and watch memory. Run
+`python -m loadtest.run` against a **staging** copy on the real plan to see your own numbers (`loadtest/README.md`);
+never against production. Keep `(DB_POOL_SIZE + DB_MAX_OVERFLOW) x processes` under Postgres `max_connections`.
+
 ## 5. Turn billing on
 
 Only after step 4 works end to end: set `ENFORCE_PLAN_LIMITS=1`. Free accounts then get 5 scans a month, no re-scan
