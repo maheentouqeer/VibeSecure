@@ -9,7 +9,7 @@ import uuid
 from datetime import datetime, timezone
 
 from dotenv import load_dotenv
-from sqlalchemy import create_engine, String, Text, DateTime, ForeignKey, UniqueConstraint
+from sqlalchemy import create_engine, String, Text, DateTime, ForeignKey, Index, UniqueConstraint, text
 from sqlalchemy.orm import (
     DeclarativeBase,
     Mapped,
@@ -84,7 +84,14 @@ class Organization(Base):
 
 class Membership(Base):
     __tablename__ = "memberships"
-    __table_args__ = (UniqueConstraint("user_id", "org_id", name="uq_membership_user_org"),)
+    __table_args__ = (
+        UniqueConstraint("user_id", "org_id", name="uq_membership_user_org"),
+        # At most one owner per organization, whatever the application code does.
+        Index(
+            "uq_membership_one_owner", "org_id", unique=True,
+            sqlite_where=text("role = 'owner'"), postgresql_where=text("role = 'owner'"),
+        ),
+    )
 
     id: Mapped[str] = mapped_column(String, primary_key=True, default=_uuid)
     user_id: Mapped[str] = mapped_column(ForeignKey("users.id"), nullable=False, index=True)
@@ -204,6 +211,33 @@ class ScanRun(Base):
     started_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=_now, nullable=False, index=True
     )
+
+
+class AdminAction(Base):
+    """Audit trail of everything done through the admin API. Records what was
+    done to which object -- never scan contents, findings, or target URLs."""
+
+    __tablename__ = "admin_actions"
+
+    id: Mapped[str] = mapped_column(String, primary_key=True, default=_uuid)
+    at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now, index=True)
+    action: Mapped[str] = mapped_column(String, nullable=False)
+    target: Mapped[str | None] = mapped_column(String, nullable=True)
+    detail: Mapped[str | None] = mapped_column(Text, nullable=True)
+    ip: Mapped[str | None] = mapped_column(String, nullable=True)
+
+
+class RateEvent(Base):
+    """One hit against a rate limit (see backend/limits.py). Kept in the
+    database so limits are exact across instances and survive restarts."""
+
+    __tablename__ = "rate_events"
+    __table_args__ = (Index("ix_rate_events_lookup", "bucket", "key", "ts"),)
+
+    id: Mapped[str] = mapped_column(String, primary_key=True, default=_uuid)
+    bucket: Mapped[str] = mapped_column(String, nullable=False)
+    key: Mapped[str] = mapped_column(String, nullable=False)
+    ts: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=_now)
 
 
 def init_db() -> None:
