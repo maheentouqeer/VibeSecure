@@ -57,8 +57,8 @@ def is_public_address(ip: ipaddress.IPv4Address | ipaddress.IPv6Address) -> bool
             return is_public_address(ipaddress.IPv4Address(int(ip) & 0xFFFFFFFF))
         if ip.teredo and not all(is_public_address(v4) for v4 in ip.teredo):
             return False
-        if ip.sixtofour is not None and not is_public_address(ip.sixtofour):
-            return False
+        if ip.sixtofour is not None:
+            return is_public_address(ip.sixtofour)
 
     # is_global alone is not enough: Python reports some multicast ranges as global.
     return not (
