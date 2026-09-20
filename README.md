@@ -171,6 +171,45 @@ Open [http://localhost:3000](http://localhost:3000) in your web browser.
 
 ---
 
+## Accounts, Plans & Teams (optional)
+
+Everything works anonymously out of the box. To add real accounts:
+
+- **Sign-in (Clerk):** set `CLERK_JWKS_URL` (and ideally `CLERK_ISSUER` and `CLERK_AUTHORIZED_PARTIES`). The frontend sends the Clerk session token as `Authorization: Bearer <token>`. A request with an invalid token is rejected with `401`, never treated as anonymous.
+- **Claiming scans:** after sign-in, `POST /me/claim` (with the browser's `X-Owner-Token`) moves that browser's anonymous scans into the account. From then on the old token no longer grants access to them.
+- **Plans:** `GET /me` returns the plan, limits, and this month's usage. Limits are only enforced when `ENFORCE_PLAN_LIMITS=1` (free: 5 scans/month, no re-scan on push, 1 org seat; pro: unlimited, re-scan on push; team: 5 seats). Over-limit requests get `402`.
+- **Billing:** `POST /webhooks/billing` (needs `BILLING_WEBHOOK_SECRET`, HMAC-SHA256 in `X-Billing-Signature: sha256=<hex>`) accepts provider-neutral events: `subscription.activated|updated|canceled|expired` with `plan` (`pro` for a `user`, `team` for an `org_id`), `provider_subscription_id`, optional `status` and `current_period_end`. Connect a payment provider (Whop, Stripe, Paddle, ...) by mapping its events to this shape. A canceled subscription stays active until the period the customer paid for ends.
+- **Teams:** `POST /orgs`, `GET /orgs`, `POST /orgs/{id}/members` (the person must have signed in once), `DELETE /orgs/{id}/members/{user_id}`. Pass `org_id` to `POST /scans` to file a scan under an organization. Owners and admins get `GET /orgs/{id}/dashboard`: pass/fail for every member's projects (latest scan of each) and read access to those scans.
+
+---
+
+## Background Jobs & Workers
+
+Scans run through a database-backed job queue (`scan_jobs`), so they survive restarts and need no Redis. A job is claimed with one atomic UPDATE, so any number of processes can share the queue safely, and a running job's worker sends a heartbeat: if the worker dies, another one re-queues the job after `JOB_STALE_SECONDS` (up to 3 attempts, then the scan is marked failed).
+
+- **Inline (default):** the API process runs jobs itself. Nothing else to run.
+- **External:** set `SCAN_WORKER_MODE=external` on the API and run `python -m backend.worker` (the `Procfile` has a `worker:` entry) on one or more machines. `WORKER_CONCURRENCY` sets jobs per worker. SIGTERM finishes current jobs, then exits.
+
+## Deleting Data
+
+- `DELETE /scans/{id}` (owner only, not while running) removes the scan, its findings and queued jobs.
+- `DELETE /me` removes the account and all its scans. It is refused with `409` while there is an active subscription (cancel it with the payment provider first), a running scan, or an organization that still has other members. A solo-owned organization is deleted with the account.
+- `DELETE /orgs/{id}` (owner only) removes the organization; members keep their scans.
+- Usage counts (`scan_runs`) are kept anonymously so deleting scans can't reset a plan's monthly limit or the daily spend cap. They contain no code or findings.
+- `ANON_SCAN_RETENTION_DAYS` optionally auto-deletes old finished anonymous scans.
+
+## Private Repositories (GitHub connection)
+
+Pro/Team users can scan their private GitHub repos through their own account. Create a GitHub OAuth App and set `GITHUB_OAUTH_CLIENT_ID`, `GITHUB_OAUTH_CLIENT_SECRET`, `GITHUB_OAUTH_REDIRECT_URI` and `TOKEN_ENCRYPTION_KEY` (see `.env.example`). Flow: `GET /integrations/github/authorize` returns the GitHub URL to send the browser to, GitHub returns to `/integrations/github/callback`, `GET /integrations/github` reports the connection, and `DELETE /integrations/github` disconnects (and revokes the grant). GitHub OAuth Apps can only read private repos with the broad `repo` scope, so users should know that is what they are granting. Tokens are stored encrypted, are only ever offered to `github.com`, and are never returned by any endpoint.
+
+> Security note: `GITHUB_TOKEN` (a server-wide token) is still honoured for cloning. Anyone who can submit a URL can then scan whatever that token can read, so only set it if that is acceptable, or leave it unset and rely on per-user connections.
+
+## Whop Billing
+
+`POST /webhooks/whop` verifies Whop's Standard Webhooks signature (secret in `WHOP_WEBHOOK_SECRET`) and maps membership events to plans via `WHOP_PLAN_MAP`. Create the Whop checkout with metadata `{"clerk_user_id": "<Clerk id>"}` for Pro, or `{"clerk_user_id": "...", "org_id": "<org id>"}` for Team, so the purchase is tied to the right account. Purchases made before the customer first signs in are kept and completed at first sign-in, and out-of-order retries can't undo newer events. Test it with a Whop test webhook before going live.
+
+---
+
 ## MCP Server (scan from inside your AI coding tool)
 
 `mcp_server.py` exposes the scanner to Claude Code, Cursor, VS Code Copilot agent mode, Claude Desktop, and any other MCP client. It runs on your machine over stdio, and `scan_workspace` reads your project straight from disk: nothing is cloned and no GitHub token is needed.

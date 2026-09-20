@@ -1,0 +1,10 @@
+# Test/dev-only tooling (not needed to run the app): pip install -r requirements-dev.txt
+-r requirements.txt
+
+# Cross-checks the Whop webhook signature code against the reference library
+# (tests/test_whop.py skips that one test if this is missing).
+standardwebhooks>=1.0
+
+# Optional: a self-contained Postgres for running the suite against Postgres:
+#   TEST_DATABASE_URL=postgresql+psycopg2://... pytest tests
+# pgserver>=0.1
