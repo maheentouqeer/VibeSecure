@@ -30,7 +30,30 @@ if DATABASE_URL.startswith("postgres://"):
 # Postgres ignores it entirely so it's safe to always pass.
 connect_args = {"check_same_thread": False} if DATABASE_URL.startswith("sqlite") else {}
 
-engine = create_engine(DATABASE_URL, connect_args=connect_args)
+def _int_env(name: str, default: int) -> int:
+    try:
+        return max(int(os.getenv(name, default)), 1)
+    except ValueError:
+        return default
+
+
+# Connections are the scarcest resource under load, so the pool is explicit:
+#   DB_POOL_SIZE / DB_MAX_OVERFLOW  connections kept / extra allowed in a burst (defaults 20 / 20:
+#                                   the web server runs up to 40 request threads, so no thread
+#                                   should have to wait for a connection)
+#   DB_POOL_TIMEOUT                 seconds a request waits for a connection before failing (default 15)
+# Keep DB_POOL_SIZE + DB_MAX_OVERFLOW (times the number of API + worker processes) under the
+# database's max_connections. pool_pre_ping replaces connections the platform silently dropped.
+_pool_kwargs = {}
+if ":memory:" not in DATABASE_URL:
+    _pool_kwargs = {
+        "pool_size": _int_env("DB_POOL_SIZE", 20),
+        "max_overflow": _int_env("DB_MAX_OVERFLOW", 20),
+        "pool_timeout": _int_env("DB_POOL_TIMEOUT", 15),
+        "pool_pre_ping": True,
+    }
+
+engine = create_engine(DATABASE_URL, connect_args=connect_args, **_pool_kwargs)
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
 

@@ -25,6 +25,7 @@ import logging
 import os
 import socket
 import threading
+from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timedelta, timezone
 from typing import Callable
 
@@ -39,6 +40,55 @@ MAX_ATTEMPTS = 3
 ACTIVE_STATUSES = ("queued", "running")
 
 _handlers: dict[str, Callable[[str], None]] = {}
+
+# Scans are heavy (Semgrep is CPU and memory hungry), so only a few run at once in this
+# process. They run on their OWN small thread pool, not the web server's: jobs waiting for
+# a turn sit in this pool's queue (as "pending", which users see as "queued") instead of
+# blocking threads that requests need. (Found with the load test: 40 waiting scans on the
+# shared pool left no thread free to answer even /healthz.)
+_executor_lock = threading.Lock()
+_executor: tuple[int, ThreadPoolExecutor] | None = None
+
+
+def scan_concurrency() -> int:
+    try:
+        return max(int(os.getenv("SCAN_CONCURRENCY", "3")), 1)
+    except ValueError:
+        return 3
+
+
+def _get_executor() -> ThreadPoolExecutor:
+    """One pool per process, rebuilt if SCAN_CONCURRENCY changes."""
+    global _executor
+    size = scan_concurrency()
+    with _executor_lock:
+        if _executor is None or _executor[0] != size:
+            if _executor is not None:
+                _executor[1].shutdown(wait=False)
+            _executor = (size, ThreadPoolExecutor(max_workers=size, thread_name_prefix="scan"))
+        return _executor[1]
+
+
+def submit(job_id: str) -> None:
+    """Queue a job on the scan pool and return immediately. Never blocks the caller."""
+
+    def run() -> None:
+        try:
+            process(job_id)
+        except Exception:  # process() settles the scan itself; this only guards the pool thread
+            logger.exception("scan pool: job %s crashed outside its handler", job_id)
+
+    _get_executor().submit(run)
+
+
+def shutdown() -> None:
+    """Stop accepting work at app shutdown. Queued jobs stay 'pending' in the database
+    and are picked up after the next start, so nothing is lost."""
+    global _executor
+    with _executor_lock:
+        if _executor is not None:
+            _executor[1].shutdown(wait=False, cancel_futures=True)
+            _executor = None
 
 
 def register(kind: str, handler: Callable[[str], None]) -> None:

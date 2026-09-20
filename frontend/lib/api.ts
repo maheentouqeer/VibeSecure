@@ -50,7 +50,7 @@ export interface ApiScan {
 
 export class ApiError extends Error {}
 
-async function apiFetch(path: string, init: RequestInit = {}, signal?: AbortSignal): Promise<ApiScan> {
+async function apiFetch<T = ApiScan>(path: string, init: RequestInit = {}, signal?: AbortSignal): Promise<T> {
   const token = getOwnerToken();
   const headers = new Headers(init.headers);
   headers.set("Content-Type", "application/json");
@@ -86,15 +86,22 @@ function sleep(ms: number, signal?: AbortSignal): Promise<void> {
   });
 }
 
+export interface ApiScanStatus {
+  id: string;
+  status: string;
+  error: string | null;
+}
+
 // POST /scans and /rescan only queue a background job; poll until it finishes
-// so callers still get one finished scan back.
+// so callers still get one finished scan back. Polling uses the light status
+// endpoint (no findings); the full scan is fetched once, at the end.
 async function waitForScan(scanId: string, signal?: AbortSignal): Promise<ApiScan> {
   const deadline = Date.now() + MAX_WAIT_MS;
   for (;;) {
-    const scan = await getScan(scanId, signal);
-    if (scan.status !== "queued" && scan.status !== "running") {
-      if (scan.error) throw new ApiError(scan.error);
-      return scan;
+    const state = await apiFetch<ApiScanStatus>(`/scans/${scanId}/status`, {}, signal);
+    if (state.status !== "queued" && state.status !== "running") {
+      if (state.error) throw new ApiError(state.error);
+      return getScan(scanId, signal);
     }
     if (Date.now() > deadline) throw new ApiError("The scan is taking too long. Please try again.");
     await sleep(POLL_INTERVAL_MS, signal);

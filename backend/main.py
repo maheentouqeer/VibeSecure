@@ -81,6 +81,7 @@ async def lifespan(_app: FastAPI):
     finally:
         stop.set()
         worker.join(timeout=5)
+        jobs.shutdown()
 
 
 _init_sentry()
@@ -182,28 +183,35 @@ def _finding_to_dict(f: db.Finding) -> dict:
 
 
 def _run_scan_job(scan_id: str) -> None:
-    """Background job for POST /scans. Uses its own session because the
-    request's session is closed by the time this runs."""
+    """Background job for POST /scans.
+
+    The long part (the scan itself) runs with NO database connection held:
+    a scan that keeps its transaction open for its whole duration would use up
+    the connection pool and starve every web request. So it is three short
+    database steps around the scan: read, run, save."""
     gh: dict = {}
-    with db.SessionLocal() as session:
-        try:
+    try:
+        with db.SessionLocal() as session:
             scan = session.get(db.Scan, scan_id)
-            if scan.status == "completed":
-                return  # a recovered job that had already finished; don't save findings twice
+            if scan is None or scan.status == "completed":
+                return  # gone, or a recovered job that had already finished; don't save findings twice
+            target = scan.target
+            gh = _github_kwargs(session, scan)
             scan.status = "running"
             session.commit()
 
-            gh = _github_kwargs(session, scan)
-            result = run_full_scan(scan.target, **gh)
+        result = run_full_scan(target, **gh)  # long: holds no connection
 
+        with db.SessionLocal() as session:
+            scan = session.get(db.Scan, scan_id)
             scan.platform = result["platform"]
             scan.commit_sha = result.get("commit_sha")
             _save_findings(session, scan, result["findings"])
             scan.status = "completed"
             session.commit()
-        except Exception as exc:
-            session.rollback()
-            _report_job_failure(exc)
+    except Exception as exc:
+        _report_job_failure(exc)
+        with db.SessionLocal() as session:
             scan = session.get(db.Scan, scan_id)
             scan.status = "failed"
             scan.error = _failure_message("Scan failed", exc, used_token=bool(gh))
@@ -213,23 +221,28 @@ def _run_scan_job(scan_id: str) -> None:
 def _run_rescan_job(scan_id: str) -> None:
     """Background job for POST /scans/{id}/rescan. A failed rescan leaves the
     scan's existing results intact (status goes back to "completed") and
-    records the failure in `error` instead."""
+    records the failure in `error` instead. Like _run_scan_job, the scan
+    itself runs without holding a database connection."""
     gh: dict = {}
-    with db.SessionLocal() as session:
-        try:
+    try:
+        with db.SessionLocal() as session:
             scan = session.get(db.Scan, scan_id)
-            scan.status = "running"
-            session.commit()
-
+            target, commit_sha = scan.target, scan.commit_sha
             # Skip all scanner/LLM work when the repo is still at the commit
             # this scan saw -- unless a scanner failed last time, in which case
             # the rescan is the user's retry and must really run.
             scan_was_incomplete = any(
                 f.category == "scan_incomplete" and f.status == "open" for f in scan.findings
             )
-            kwargs = {"unchanged_since": scan.commit_sha} if scan.commit_sha and not scan_was_incomplete else {}
             gh = _github_kwargs(session, scan)
-            result = run_full_scan(scan.target, **kwargs, **gh)
+            scan.status = "running"
+            session.commit()
+
+        kwargs = {"unchanged_since": commit_sha} if commit_sha and not scan_was_incomplete else {}
+        result = run_full_scan(target, **kwargs, **gh)  # long: holds no connection
+
+        with db.SessionLocal() as session:
+            scan = session.get(db.Scan, scan_id)
             if result.get("unchanged"):
                 scan.status = "completed"
                 session.commit()
@@ -259,9 +272,9 @@ def _run_rescan_job(scan_id: str) -> None:
 
             scan.status = "completed"
             session.commit()
-        except Exception as exc:
-            session.rollback()
-            _report_job_failure(exc)
+    except Exception as exc:
+        _report_job_failure(exc)
+        with db.SessionLocal() as session:
             scan = session.get(db.Scan, scan_id)
             scan.status = "completed"
             scan.error = _failure_message("Rescan failed", exc, used_token=bool(gh))
@@ -273,11 +286,24 @@ jobs.register("rescan", _run_rescan_job)
 jobs.register("webhook", _run_rescan_job)
 
 
+def _release(session: Session, scan: db.Scan) -> schemas.ScanResponse:
+    """Serialize the response now and hand the connection back.
+
+    FastAPI keeps a request's database session open until that request's
+    background tasks have finished. A scan waiting for a free slot would
+    therefore pin one connection each, and a burst of scans would starve every
+    other request of connections (found with the load test)."""
+    response = schemas.ScanResponse.model_validate(scan)
+    session.close()
+    return response
+
+
 def _kick(background_tasks: BackgroundTasks, job: db.ScanJob) -> None:
-    """In inline mode run the job right after the response is sent; in
-    external mode leave it pending for a worker process."""
+    """In inline mode hand the job to the scan pool right after the response is
+    sent (submit() only queues it and returns at once); in external mode leave
+    it pending for a worker process."""
     if jobs.inline():
-        background_tasks.add_task(jobs.process, job.id)
+        background_tasks.add_task(jobs.submit, job.id)
 
 
 @app.post("/scans", response_model=schemas.ScanResponse, status_code=202)
@@ -321,7 +347,7 @@ def create_scan(
     # scan data. The client polls GET /scans/{id} until status is
     # "completed" or "failed".
     response.headers["X-Owner-Token"] = owner_token
-    return scan
+    return _release(session, scan)
 
 
 @app.get("/scans", response_model=list[schemas.ScanResponse])
@@ -351,6 +377,21 @@ def get_scan(
     actor: Actor = Depends(get_actor),
 ):
     return get_scan_or_404(session, scan_id, actor, allow_org_admin=True)
+
+
+@app.get("/scans/{scan_id}/status")
+def get_scan_status(
+    scan_id: str,
+    session: Session = Depends(db.get_db),
+    actor: Actor = Depends(get_actor),
+):
+    """What a client should poll while a scan runs: just the state, without the
+    findings. The full scan (GET /scans/{id}) is fetched once, when this says
+    it is done. Far cheaper, which matters because every waiting user polls."""
+    scan = get_scan_or_404(session, scan_id, actor, allow_org_admin=True)
+    body = {"id": scan.id, "status": scan.status, "error": scan.error}
+    session.close()
+    return body
 
 
 @app.delete(
@@ -398,7 +439,7 @@ def rescan_scan(
     session.refresh(scan)
 
     _kick(background_tasks, job)
-    return scan
+    return _release(session, scan)
 
 
 @app.get("/scans/{scan_id}/badge", response_model=schemas.BadgeResponse)
@@ -529,4 +570,5 @@ async def github_webhook(
         _kick(background_tasks, job)
         triggered += 1
 
+    session.close()  # background re-scans may wait for slots; don't hold a connection meanwhile
     return {"triggered": triggered}
