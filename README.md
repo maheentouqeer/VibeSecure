@@ -161,7 +161,7 @@ Open [http://localhost:3000](http://localhost:3000) in your web browser.
 ## API Behavior Notes
 
 - **Async scans:** `POST /scans` and `POST /scans/{id}/rescan` return `202` immediately; poll `GET /scans/{id}` until `status` is `completed` or `failed` (`error` holds the reason). A rescan already in progress returns `409`.
-- **Limits:** `SCAN_RATE_LIMIT_PER_HOUR` (per client IP, `429`) and `DAILY_SCAN_CAP` (global per UTC day, `503`). Set either to `0` to disable.
+- **Limits:** `SCAN_RATE_LIMIT_PER_HOUR` (per client IP, `429`) and `DAILY_SCAN_CAP` (global per UTC day, `503`). Set either to `0` to disable. Other endpoints are throttled too (GitHub connect, org changes and deletions, and bad webhook signatures; see `.env.example`). Hits are counted in the database (`RATE_LIMIT_STORE=db`, the default), so the limits are exact across instances and survive restarts; `RATE_LIMIT_STORE=memory` keeps them per process.
 - **Target safety:** private, loopback, and link-local addresses are refused (SSRF guard). Set `ALLOW_PRIVATE_TARGETS=1` for local development only.
 - **Migrations:** Alembic runs automatically at startup. After editing models in `backend/db.py`, run `alembic revision --autogenerate -m "message"` and commit the new file (see `migration_db.txt`).
 - **Badge:** `GET /badge/{scan_id}.svg` is public and shows only verified / not verified.
@@ -182,6 +182,32 @@ Everything works anonymously out of the box. To add real accounts:
 - **Teams:** `POST /orgs`, `GET /orgs`, `POST /orgs/{id}/members` (the person must have signed in once), `DELETE /orgs/{id}/members/{user_id}`. Pass `org_id` to `POST /scans` to file a scan under an organization. Owners and admins get `GET /orgs/{id}/dashboard`: pass/fail for every member's projects (latest scan of each) and read access to those scans.
 
 ---
+
+## Health Checks
+
+- `GET /healthz` is liveness: the process is up. It never touches the database.
+- `GET /readyz` is readiness: the database answers, migrations are at the version this code expects, and (with `SCAN_WORKER_MODE=external`) the queue is being drained. It returns `503` with the reason otherwise, and reports queue counts only. Point your platform's health check at `/readyz` so a bad deploy never receives traffic.
+
+## Organization Roles
+
+Roles are `owner`, `admin` and `member`. Only the owner can add admins, promote or demote (`PATCH /orgs/{id}/members/{user_id}` with `{"role": "admin"|"member"}`), remove admins, transfer ownership (`POST /orgs/{id}/transfer` with `{"user_id": ...}`; the previous owner becomes an admin) or delete the organization. Admins can add and remove plain members and see the organizer dashboard. The database itself guarantees an organization has exactly one owner.
+
+## Admin API
+
+Set `ADMIN_API_KEY` (24+ random characters) and send it as `X-Admin-Key`; without it the endpoints return `503`. Wrong keys are locked out per IP. It is deliberately blind: counts and account metadata only, never scan targets, findings or tokens.
+
+| Endpoint | Purpose |
+|---|---|
+| `GET /admin/stats` | users, scans, today's usage against the daily cap, active plans, job counts |
+| `GET /admin/users?email=` | find accounts (effective plan, scan and org counts) |
+| `POST /admin/users/{id}/plan` `{"days": 30, "note": "..."}` | grant a complimentary Pro plan |
+| `POST /admin/orgs/{id}/plan` | grant a complimentary Team plan |
+| `DELETE /admin/subscriptions/{id}` | end a complimentary plan (provider subscriptions can't be touched here) |
+| `GET /admin/audit` | everything done through this API |
+
+## Continuous Integration
+
+`.github/workflows/ci.yml` runs on every push and pull request: the backend suite on SQLite, the backend suite on a Postgres service (after applying migrations up, down to nothing, and up again), and the frontend typecheck, lint and build. Run the suite against Postgres locally with `TEST_DATABASE_URL=postgresql+psycopg2://... pytest tests`.
 
 ## Background Jobs & Workers
 
