@@ -32,6 +32,8 @@ def test_credentials_are_only_for_github_itself(url, expected):
 
 def _capture_clone_env(monkeypatch):
     seen = {}
+    # DNS pinning is covered in test_dns_rebinding.py; keep these tests off the network.
+    monkeypatch.setattr(repo_utils, "git_pin_env", lambda url, env: env)
 
     def fake_clone_from(url, to_path, depth, env):
         seen["env"] = env

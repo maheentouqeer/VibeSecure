@@ -7,7 +7,7 @@ from urllib.parse import urljoin
 
 import requests
 
-from scanner.url_safety import UnsafeTargetError, assert_public_url
+from scanner.url_safety import UnsafeTargetError, assert_public_url, safe_session
 
 SECURITY_HEADERS = [
     "Content-Security-Policy",
@@ -22,19 +22,22 @@ MAX_BODY_BYTES = 1_000_000
 def _safe_get(url: str) -> requests.Response:
     """GET that validates the destination of every redirect hop against the
     SSRF guard (requests' own redirect following would skip that check) and
-    never reads more than MAX_BODY_BYTES."""
-    for _ in range(MAX_REDIRECTS + 1):
-        assert_public_url(url)
-        resp = requests.get(url, timeout=6, allow_redirects=False, stream=True)
-        if resp.is_redirect and resp.headers.get("Location"):
-            url = urljoin(url, resp.headers["Location"])
+    never reads more than MAX_BODY_BYTES. The session it uses only opens
+    sockets to addresses validated at connect time, so DNS rebinding between
+    the pre-flight check and the connection cannot redirect it inward."""
+    with safe_session() as session:
+        for _ in range(MAX_REDIRECTS + 1):
+            assert_public_url(url)
+            resp = session.get(url, timeout=6, allow_redirects=False, stream=True)
+            if resp.is_redirect and resp.headers.get("Location"):
+                url = urljoin(url, resp.headers["Location"])
+                resp.close()
+                continue
+            body = resp.raw.read(MAX_BODY_BYTES, decode_content=True)
+            resp._content = body
+            resp._content_consumed = True
             resp.close()
-            continue
-        body = resp.raw.read(MAX_BODY_BYTES, decode_content=True)
-        resp._content = body
-        resp._content_consumed = True
-        resp.close()
-        return resp
+            return resp
     raise requests.TooManyRedirects(f"More than {MAX_REDIRECTS} redirects")
 
 

@@ -86,6 +86,19 @@ def test_run_full_scan_refuses_internal_targets_before_doing_any_work(monkeypatc
         orchestrator.run_full_scan("http://169.254.169.254/latest/meta-data/")
 
 
+class _FakeSession:
+    """Stands in for safe_session(); the address-level checks are tested in test_dns_rebinding.py."""
+
+    def __init__(self, get):
+        self.get = get
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *exc):
+        return False
+
+
 class _Resp:
     def __init__(self, status=200, headers=None, body=b""):
         self.status_code = status
@@ -118,7 +131,7 @@ def test_redirect_to_internal_address_is_blocked(monkeypatch):
         assert kw["allow_redirects"] is False
         return _Resp(302, {"Location": "http://internal.test/admin"})
 
-    monkeypatch.setattr(live_scanner.requests, "get", fake_get)
+    monkeypatch.setattr(live_scanner, "safe_session", lambda: _FakeSession(fake_get))
     with pytest.raises(UnsafeTargetError):
         live_scanner._safe_get("http://pub.test/")
     assert fetched == ["http://pub.test/"]  # the internal hop was never requested
@@ -133,7 +146,7 @@ def test_safe_get_follows_public_redirects_and_caps_body(monkeypatch):
             return _Resp(301, {"Location": "https://b.test/final"})
         return _Resp(200, {"Content-Security-Policy": "default-src 'self'"}, big)
 
-    monkeypatch.setattr(live_scanner.requests, "get", fake_get)
+    monkeypatch.setattr(live_scanner, "safe_session", lambda: _FakeSession(fake_get))
     resp = live_scanner._safe_get("http://a.test/")
     assert resp.status_code == 200
     assert len(resp.text) == live_scanner.MAX_BODY_BYTES
@@ -141,9 +154,7 @@ def test_safe_get_follows_public_redirects_and_caps_body(monkeypatch):
 
 def test_redirect_loop_is_bounded(monkeypatch):
     monkeypatch.setattr(url_safety.socket, "getaddrinfo", _fake_dns({"loop.test": PUBLIC_IP}))
-    monkeypatch.setattr(
-        live_scanner.requests, "get", lambda url, **kw: _Resp(302, {"Location": "http://loop.test/"})
-    )
+    monkeypatch.setattr(live_scanner, "safe_session", lambda: _FakeSession(lambda url, **kw: _Resp(302, {"Location": "http://loop.test/"})))
     with pytest.raises(requests.TooManyRedirects):
         live_scanner._safe_get("http://loop.test/")
 
@@ -152,9 +163,7 @@ def test_scan_live_url_swallows_unsafe_redirect_instead_of_crashing(monkeypatch)
     monkeypatch.setattr(
         url_safety.socket, "getaddrinfo", _fake_dns({"pub.test": PUBLIC_IP, "internal.test": "127.0.0.1"})
     )
-    monkeypatch.setattr(
-        live_scanner.requests, "get", lambda url, **kw: _Resp(302, {"Location": "http://internal.test/"})
-    )
+    monkeypatch.setattr(live_scanner, "safe_session", lambda: _FakeSession(lambda url, **kw: _Resp(302, {"Location": "http://internal.test/"})))
     assert live_scanner.scan_live_url("http://pub.test") == []
 
 

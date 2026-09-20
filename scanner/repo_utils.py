@@ -6,6 +6,7 @@ from urllib.parse import urlparse
 from pathlib import Path
 
 import git
+from scanner.url_safety import git_pin_env
 from git.exc import GitCommandNotFound, GitCommandError
 
 
@@ -81,6 +82,10 @@ def clone_repo(github_url: str, token: str | None = None) -> Path:
             clone_env["VIBESECURE_GIT_ASKPASS_SECRET"] = token
             clone_env["GIT_ASKPASS"] = str(askpass)
             clone_env["GIT_TERMINAL_PROMPT"] = "0"
+
+        # Pin the host to the addresses just validated, so git cannot re-resolve
+        # it to something internal (DNS rebinding). Raises if the host isn't public.
+        clone_env = git_pin_env(github_url, clone_env)
 
         git.Repo.clone_from(
             github_url,
