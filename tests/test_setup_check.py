@@ -231,3 +231,17 @@ def test_exit_code_is_nonzero_only_when_something_fails(monkeypatch, capsys):
     monkeypatch.setattr(setup_check.os, "environ", _env_with({"ADMIN_API_KEY": "short"}))
     assert setup_check.main([]) == 1
     assert "1 failures" in capsys.readouterr().out
+
+
+def test_server_github_token_states_are_described_accurately():
+    def state(**env):
+        return next(r for r in run_checks(env) if r.name == "server github token")
+
+    assert state().status == "OK"
+    ignored = state(GITHUB_TOKEN="x")
+    assert ignored.status == "WARN" and "IGNORED" in ignored.detail
+    wide = state(GITHUB_TOKEN="x", ALLOW_SERVER_GITHUB_TOKEN="1")
+    assert wide.status == "WARN" and "EVERY repository" in wide.detail
+    limited = state(GITHUB_TOKEN="x", ALLOW_SERVER_GITHUB_TOKEN="1", SERVER_GITHUB_TOKEN_OWNERS="my-org, me")
+    assert limited.status == "OK" and "my-org" in limited.detail
+    assert state(GITHUB_PAT="x").status == "WARN"

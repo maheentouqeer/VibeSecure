@@ -1,4 +1,5 @@
 """Utilities for cloning repositories safely in the scanner runtime."""
+import logging
 import os
 import shutil
 import tempfile
@@ -22,16 +23,52 @@ def _configure_git() -> None:
     git.Git.refresh(path=executable)
 
 
+logger = logging.getLogger(__name__)
+
 _configure_git()
 
 
+_warned_server_token = False
+
+
 def _github_token() -> str | None:
-    """Return an optional GitHub token for cloning private GitHub repos."""
+    """The raw server-wide GitHub token from the environment, if one is set.
+    Not used directly for cloning: see server_token_for()."""
     return (
         os.getenv("GITHUB_TOKEN")
         or os.getenv("GITHUB_PAT")
         or os.getenv("VIBESECURE_GITHUB_TOKEN")
     )
+
+
+def server_token_for(url: str) -> str | None:
+    """The server-wide GitHub token, if it may be used for this repository.
+
+    A server-wide token lets ANYONE who can submit a URL scan whatever the
+    token can read, so it is opt-in:
+      ALLOW_SERVER_GITHUB_TOKEN=1         turns it on (otherwise it is ignored)
+      SERVER_GITHUB_TOKEN_OWNERS=a,b      optional but strongly advised: only use it for
+                                          repositories owned by these GitHub users/orgs
+    Users' own connected GitHub accounts (see backend/github_oauth.py) are
+    unaffected by this."""
+    global _warned_server_token
+    token = _github_token()
+    if not token:
+        return None
+    if os.getenv("ALLOW_SERVER_GITHUB_TOKEN") != "1":
+        if not _warned_server_token:
+            _warned_server_token = True
+            logger.warning(
+                "A server-wide GitHub token is set but ignored. Set ALLOW_SERVER_GITHUB_TOKEN=1 to use it "
+                "(and SERVER_GITHUB_TOKEN_OWNERS to limit it to your own repositories)."
+            )
+        return None
+    owners = [o.strip().lower() for o in os.getenv("SERVER_GITHUB_TOKEN_OWNERS", "").split(",") if o.strip()]
+    if owners:
+        segments = [p for p in urlparse(url).path.split("/") if p]
+        if not segments or segments[0].lower() not in owners:
+            return None
+    return token
 
 
 def _is_github_url(url: str) -> bool:
@@ -62,7 +99,7 @@ def clone_repo(github_url: str, token: str | None = None) -> Path:
 
     try:
         clone_env = os.environ.copy()
-        token = (token or _github_token()) if _is_github_url(github_url) else None
+        token = (token or server_token_for(github_url)) if _is_github_url(github_url) else None
 
         if token:
             # Git invokes this helper when it needs HTTP credentials. The

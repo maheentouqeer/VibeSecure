@@ -192,9 +192,14 @@ def check_admin_and_limits(env) -> list[Result]:
 
 
 def check_secrets_hygiene(env) -> list[Result]:
-    if _has(env, "GITHUB_TOKEN") or _has(env, "GITHUB_PAT") or _has(env, "VIBESECURE_GITHUB_TOKEN"):
-        return [Result("WARN", "server github token", "a server-wide GitHub token is set: anyone who can submit a URL can scan whatever it can read")]
-    return [Result("OK", "server github token", "none set")]
+    if not any(_has(env, n) for n in ("GITHUB_TOKEN", "GITHUB_PAT", "VIBESECURE_GITHUB_TOKEN")):
+        return [Result("OK", "server github token", "none set")]
+    if env.get("ALLOW_SERVER_GITHUB_TOKEN") != "1":
+        return [Result("WARN", "server github token", "set but IGNORED. Set ALLOW_SERVER_GITHUB_TOKEN=1 to use it (and SERVER_GITHUB_TOKEN_OWNERS to limit it)")]
+    owners = [o for o in env.get("SERVER_GITHUB_TOKEN_OWNERS", "").split(",") if o.strip()]
+    if not owners:
+        return [Result("WARN", "server github token", "enabled for EVERY repository: anyone who can submit a URL can scan whatever it can read. Set SERVER_GITHUB_TOKEN_OWNERS")]
+    return [Result("OK", "server github token", "limited to owner(s): " + ", ".join(o.strip() for o in owners))]
 
 
 def check_tools(env) -> list[Result]:
