@@ -183,6 +183,22 @@ Everything works anonymously out of the box. To add real accounts:
 
 ---
 
+## What Is Sent to the AI
+
+Explanations and fix prompts are written by Google's Gemini. Before anything reaches it, `agents/privacy.py` masks the finding, and the answer is put back together locally, so users still read real file names.
+
+**Sent:** the kind of issue (category and label, for example "Stripe Secret Key" or "Row-Level Security not enabled"), severity, the platform name, line numbers, and the scanner's rule text, with the masking below applied.
+
+**Never sent:**
+- your source code
+- secret values, not even their first characters
+- real file paths, database table names and project URLs, which appear to the model only as placeholders such as `<FILE_1.ts>`, `<TABLE_2>` and `<URL_3>`
+- credentials, tokens, JWTs, email addresses and IP addresses that show up in scanner messages, which are redacted
+
+**Failure handling:** a placeholder the model invents or mangles beyond repair makes its answer unusable. The next model is tried, then the built-in template, so a broken or leaked value never reaches the user. Repositories are cloned and scanned on your own server; only the masked findings go to Gemini. The MCP server uses the same masking.
+
+**Limits, so nothing is over-claimed:** a file's extension stays visible so the model knows the language. Category and label reveal what kinds of issues exist. Rule text from Semgrep is masked for paths, URLs and credentials, but an ordinary identifier that a rule happens to quote (a function or variable name) is not recognisable as sensitive and is sent. If a project is sensitive enough that this matters, leave `GEMINI_API_KEY` unset: everything then uses local templates and nothing is sent.
+
 ## Checking Your Setup
 
 `python -m backend.setup_check` inspects the environment and reports what is misconfigured (`--live` adds read-only checks of Clerk and the Whop key, `--api URL` checks a running API's health, `--sentry-test` sends a test event). It never prints secrets and exits `1` on any failure. `GO_LIVE.md` is the step-by-step checklist for connecting the real services.
@@ -191,6 +207,10 @@ Everything works anonymously out of the box. To add real accounts:
 
 - `GET /healthz` is liveness: the process is up. It never touches the database.
 - `GET /readyz` is readiness: the database answers, migrations are at the version this code expects, and (with `SCAN_WORKER_MODE=external`) the queue is being drained. It returns `503` with the reason otherwise, and reports queue counts only. Point your platform's health check at `/readyz` so a bad deploy never receives traffic.
+
+## Invite Links
+
+Adding a member by email only works if they have already signed in once. Invite links work for anyone: `POST /orgs/{id}/invites` (owner/admin; body `{"email": optional, "role": "member"|"admin"}`) returns a single-use `token` (shown once; only its hash is stored) and, if `FRONTEND_URL` is set, a ready link `FRONTEND_URL?invite=<token>`. Share it however you like. The invitee signs up, then the frontend calls `GET /invites/preview?token=` (no sign-in; shows the organization and role) and `POST /invites/accept` `{"token": ...}` (signed in). Links expire after `INVITE_TTL_DAYS` (default 7), can be revoked (`DELETE /orgs/{id}/invites/{invite}`), work exactly once even under simultaneous clicks, hold a seat while pending, and unknown/expired/used tokens all get the same answer. Only owners can create admin invites. If an invite names an email address, only that address can accept it. The address comes from the sign-in token, so add the email claim to your Clerk session token, or create link-only invites. There is no email delivery yet; the link is yours to send.
 
 ## Organization Roles
 
@@ -232,7 +252,7 @@ Scans run through a database-backed job queue (`scan_jobs`), so they survive res
 
 Pro/Team users can scan their private GitHub repos through their own account. Create a GitHub OAuth App and set `GITHUB_OAUTH_CLIENT_ID`, `GITHUB_OAUTH_CLIENT_SECRET`, `GITHUB_OAUTH_REDIRECT_URI` and `TOKEN_ENCRYPTION_KEY` (see `.env.example`). Flow: `GET /integrations/github/authorize` returns the GitHub URL to send the browser to, GitHub returns to `/integrations/github/callback`, `GET /integrations/github` reports the connection, and `DELETE /integrations/github` disconnects (and revokes the grant). GitHub OAuth Apps can only read private repos with the broad `repo` scope, so users should know that is what they are granting. Tokens are stored encrypted, are only ever offered to `github.com`, and are never returned by any endpoint.
 
-> Security note: `GITHUB_TOKEN` (a server-wide token) is still honoured for cloning. Anyone who can submit a URL can then scan whatever that token can read, so only set it if that is acceptable, or leave it unset and rely on per-user connections.
+> **Server-wide token is opt-in.** A token in `GITHUB_TOKEN` (or `GITHUB_PAT`) is ignored unless `ALLOW_SERVER_GITHUB_TOKEN=1`, because with it on, anyone who can submit a URL can scan whatever that token can read. If you enable it, also set `SERVER_GITHUB_TOKEN_OWNERS=your-username,your-org` so it is only ever used for your own repositories. Users' own connections (above) are never affected by this setting.
 
 ## Checkout
 

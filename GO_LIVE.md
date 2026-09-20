@@ -90,6 +90,13 @@ unreachable repo URL you own) and confirm it appears.
 `https://YOUR-API/webhooks/github`, content type `application/json`, secret = `GITHUB_WEBHOOK_SECRET`, "push" events.
 Push to the default branch of a repo that was scanned: the scan re-runs.
 
+**Server-wide GitHub token (only if you want it).** By default a `GITHUB_TOKEN` is ignored. If you scan your own
+private repositories through it (without users connecting GitHub), set `ALLOW_SERVER_GITHUB_TOKEN=1` **and**
+`SERVER_GITHUB_TOKEN_OWNERS=your-username,your-org`, so the token is only ever used for repositories you own. Create
+it as a fine-grained personal access token limited to the repositories you need, with read-only "Contents" access.
+`python -m backend.setup_check` tells you which state you are in. Prefer per-user GitHub connections for anything
+public-facing.
+
 ## 5. Turn billing on
 
 Only after step 4 works end to end: set `ENFORCE_PLAN_LIMITS=1`. Free accounts then get 5 scans a month, no re-scan
@@ -105,6 +112,6 @@ editing the database (see the README).
 
 ## Not covered here
 
-The frontend (sign-in, team pages, GitHub connect, delete buttons, checkout) is a separate task, and the AI agents need
-a real `GEMINI_API_KEY` and valid model ids. Invites for people who have not signed up yet, and making the
-server-wide `GITHUB_TOKEN` opt-in, are deliberately still pending.
+The frontend (sign-in, team pages, GitHub connect, delete buttons, checkout, accepting invite links) is a separate
+task, and the AI agents need a real `GEMINI_API_KEY` and valid model ids. Sending invite emails is not built; invites
+are links you share yourself.
