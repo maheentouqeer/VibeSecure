@@ -11,6 +11,8 @@ import logging
 import os
 from typing import Any
 
+from agents.privacy import PLACEHOLDER_NOTE, Masker
+
 logger = logging.getLogger(__name__)
 
 # Using the requested models (Note: these will trigger the fallback function)
@@ -66,8 +68,12 @@ def triage(raw_findings: list[dict]) -> list[dict]:
         logger.debug("GEMINI_API_KEY not set; using fallback triage.")
         return _fallback_triage(raw_findings)
 
+    # One masker for the whole list, so the same file is the same placeholder in every finding.
+    masker = Masker()
+    safe_findings = [masker.mask_finding(f) for f in raw_findings]
     prompt = f"""You are an application security triage expert. Analyze the following list of raw scanner security findings:
-{json.dumps(raw_findings, indent=2)}
+{PLACEHOLDER_NOTE}
+{json.dumps(safe_findings, indent=2)}
 
 Tasks:
 1. Deduplicate findings that point to the exact same core vulnerability.
@@ -119,6 +125,10 @@ Do not output markdown code fences or any extra commentary, only valid JSON.
                 parsed = json.loads(text)
                 
                 if isinstance(parsed, list):
+                    if any(masker.unresolved(v) for item in parsed if isinstance(item, dict) for v in item.values() if isinstance(v, str)):
+                        logger.warning("Model %s used a placeholder we cannot resolve; ignoring its answer", model)
+                        continue
+                    parsed = [masker.restore_finding(item) if isinstance(item, dict) else item for item in parsed]
                     sanitized = []
                     for i, item in enumerate(parsed):
                         if not isinstance(item, dict):

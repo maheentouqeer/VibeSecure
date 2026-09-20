@@ -10,6 +10,8 @@ import logging
 import os
 from typing import Any
 
+from agents.privacy import PLACEHOLDER_NOTE, Masker
+
 logger = logging.getLogger(__name__)
 
 MODELS = ("gemini-3.8-flash", "gemini-3.6-flash")
@@ -63,11 +65,14 @@ def explain(finding: dict) -> dict:
         logger.debug("GEMINI_API_KEY not set; using fallback explainer.")
         return _fallback_explain(finding)
 
+    # Names, paths and secrets are masked before anything leaves this process (see agents/privacy.py).
+    masker = Masker()
     prompt = f"""You are a cybersecurity expert explaining vulnerabilities to a non-expert developer.
 Analyze the following security finding and explain it clearly in plain English.
+{PLACEHOLDER_NOTE}
 
 Finding details:
-{json.dumps(finding, indent=2)}
+{json.dumps(masker.mask_finding(finding), indent=2)}
 
 Respond with a valid JSON object containing exactly these two keys:
 - "what_it_means": A simple 1-2 sentence explanation of what this vulnerability is in plain terms.
@@ -102,10 +107,12 @@ Return ONLY the raw JSON object, without markdown formatting or code blocks.
 
                 parsed = json.loads(text)
                 if isinstance(parsed, dict) and "what_it_means" in parsed and "why_it_matters" in parsed:
-                    return {
-                        "what_it_means": str(parsed["what_it_means"]).strip(),
-                        "why_it_matters": str(parsed["why_it_matters"]).strip(),
-                    }
+                    what = str(parsed["what_it_means"]).strip()
+                    why = str(parsed["why_it_matters"]).strip()
+                    if masker.unresolved(what) or masker.unresolved(why):
+                        logger.warning("Model %s used a placeholder we cannot resolve; ignoring its answer", model)
+                        continue
+                    return {"what_it_means": masker.restore(what), "why_it_matters": masker.restore(why)}
                 logger.warning("Model %s returned JSON missing expected keys: %s", model, text)
             except Exception as model_err:
                 logger.warning("Error explaining finding with model %s: %s", model, model_err)

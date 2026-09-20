@@ -10,6 +10,8 @@ import logging
 import os
 from typing import Any
 
+from agents.privacy import PLACEHOLDER_NOTE, Masker
+
 logger = logging.getLogger(__name__)
 
 MODELS = ("gemini-3.8-flash", "gemini-3.6-flash")
@@ -92,12 +94,15 @@ def generate_fix_prompt(finding: dict, platform: str) -> str:
         logger.debug("GEMINI_API_KEY not set; using fallback fix prompt.")
         return _fallback_fix_prompt(finding, platform)
 
+    # Names, paths and secrets are masked before anything leaves this process (see agents/privacy.py).
+    masker = Masker()
     prompt = f"""You are an AI coding assistant prompt engineer.
 Create an actionable, ready-to-use prompt that a developer can feed to their vibe-coding AI assistant (like Lovable, Bolt, v0, Cursor, Replit, or Copilot) to automatically fix this security issue.
 
 Target platform: {platform}
+{PLACEHOLDER_NOTE}
 Security finding:
-{json.dumps(finding, indent=2)}
+{json.dumps(masker.mask_finding(finding), indent=2)}
 
 Platform conventions to respect:
 - If platform is 'lovable' or 'supabase': reference Supabase Row-Level Security (RLS) SQL policies, Supabase client auth context (auth.uid()), or Supabase secrets where applicable.
@@ -121,7 +126,10 @@ Return ONLY the prompt string to give to the vibe-coding tool. Do not wrap in ma
                 )
                 text = (response.text or "").strip()
                 if text:
-                    return text
+                    if masker.unresolved(text):
+                        logger.warning("Model %s used a placeholder we cannot resolve; ignoring its answer", model)
+                        continue
+                    return masker.restore(text)
             except Exception as model_err:
                 logger.warning("Error generating fix prompt with model %s: %s", model, model_err)
                 continue
