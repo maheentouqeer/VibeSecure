@@ -102,6 +102,26 @@ class Membership(Base):
     user: Mapped["User"] = relationship()
 
 
+class OrgInvite(Base):
+    """A single-use link that lets someone join an organization, including
+    people who have not signed up yet. Only a hash of the secret token is stored,
+    so a database leak does not leak usable invites."""
+
+    __tablename__ = "org_invites"
+
+    id: Mapped[str] = mapped_column(String, primary_key=True, default=_uuid)
+    org_id: Mapped[str] = mapped_column(ForeignKey("organizations.id"), nullable=False, index=True)
+    email: Mapped[str | None] = mapped_column(String, nullable=True)  # if set, only this address may accept
+    role: Mapped[str] = mapped_column(String, nullable=False, default="member")  # member | admin
+    token_hash: Mapped[str] = mapped_column(String, nullable=False, unique=True)
+    invited_by: Mapped[str] = mapped_column(ForeignKey("users.id"), nullable=False, index=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    accepted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    accepted_by: Mapped[str | None] = mapped_column(ForeignKey("users.id"), nullable=True)
+    revoked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+
 class Subscription(Base):
     """A paid plan held by a user or (for the team plan) an organization."""
 

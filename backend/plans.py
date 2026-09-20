@@ -73,6 +73,21 @@ def plan_for_user(session: Session, user: db.User | None) -> Plan:
     return _best(["free"] + [s.plan for s in subs if _entitled(s, now)])
 
 
+def pending_invite_count(session: Session, org_id: str) -> int:
+    """Invites that could still be accepted; they hold a seat until they expire or are revoked."""
+    now = datetime.now(timezone.utc)
+    return (
+        session.query(func.count(db.OrgInvite.id))
+        .filter(
+            db.OrgInvite.org_id == org_id,
+            db.OrgInvite.accepted_at.is_(None),
+            db.OrgInvite.revoked_at.is_(None),
+            db.OrgInvite.expires_at > now,
+        )
+        .scalar()
+    )
+
+
 def plan_for_org(session: Session, org_id: str) -> Plan:
     now = datetime.now(timezone.utc)
     subs = session.query(db.Subscription).filter_by(org_id=org_id)

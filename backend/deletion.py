@@ -45,6 +45,7 @@ def delete_org(session: Session, org: db.Organization) -> None:
             detail="This organization has an active Team subscription. Cancel it with the payment provider first.",
         )
     session.execute(update(db.Scan).where(db.Scan.org_id == org.id).values(org_id=None))
+    session.execute(delete(db.OrgInvite).where(db.OrgInvite.org_id == org.id))
     session.execute(delete(db.Subscription).where(db.Subscription.org_id == org.id))
     session.delete(org)  # memberships go with it (ORM cascade)
 
@@ -85,6 +86,9 @@ def delete_account(session: Session, user: db.User) -> None:
         update(db.ScanRun).where(db.ScanRun.owner_user_id == user.id).values(owner_user_id=None, owner_token=None)
     )
     session.execute(delete(db.Membership).where(db.Membership.user_id == user.id))
+    # Invites this user sent (they lose meaning without their sender) and their trace on invites they accepted.
+    session.execute(delete(db.OrgInvite).where(db.OrgInvite.invited_by == user.id))
+    session.execute(update(db.OrgInvite).where(db.OrgInvite.accepted_by == user.id).values(accepted_by=None))
     session.execute(delete(db.Subscription).where(db.Subscription.user_id == user.id))
     session.execute(delete(db.GithubConnection).where(db.GithubConnection.user_id == user.id))
     session.flush()

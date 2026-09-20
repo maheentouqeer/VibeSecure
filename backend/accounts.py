@@ -175,7 +175,8 @@ def add_member(
 
     if plans.enforcement_enabled():
         seats = plans.plan_for_org(session, org_id).max_org_members
-        if session.query(db.Membership).filter_by(org_id=org_id).count() >= seats:
+        taken = session.query(db.Membership).filter_by(org_id=org_id).count() + plans.pending_invite_count(session, org_id)
+        if taken >= seats:
             raise HTTPException(
                 status_code=402,
                 detail=f"This organization's plan includes {seats} seat(s). Upgrade to the Team plan to add more.",
