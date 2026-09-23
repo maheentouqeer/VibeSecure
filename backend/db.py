@@ -17,6 +17,7 @@ from sqlalchemy.orm import (
     relationship,
     sessionmaker,
 )
+from sqlalchemy.pool import NullPool
 
 load_dotenv()
 
@@ -25,6 +26,19 @@ DATABASE_URL = os.getenv("DATABASE_URL", "sqlite:///./secure_vibecode.db")
 # Normalize legacy Heroku/Render postgres:// scheme to postgresql+psycopg2://
 if DATABASE_URL.startswith("postgres://"):
     DATABASE_URL = DATABASE_URL.replace("postgres://", "postgresql+psycopg2://", 1)
+
+# Supabase requires TLS and does not show sslmode in the connection strings it
+# gives you -- add it rather than fail with an unencrypted-connection error.
+_is_supabase = "supabase.co" in DATABASE_URL or "supabase.com" in DATABASE_URL
+if _is_supabase and "sslmode=" not in DATABASE_URL:
+    sep = "&" if "?" in DATABASE_URL else "?"
+    DATABASE_URL = f"{DATABASE_URL}{sep}sslmode=require"
+
+# Supabase's pooled connection (port 6543, pgbouncer in transaction mode) does
+# its own connection pooling upstream; a second pool on top of it just holds
+# connections pgbouncer can't reuse across our clients, so hand out one
+# connection per checkout instead of maintaining a local pool.
+_use_null_pool = _is_supabase and ":6543" in DATABASE_URL
 
 # SQLite needs this connect_arg for use with FastAPI's threaded TestClient;
 # Postgres ignores it entirely so it's safe to always pass.
@@ -45,7 +59,9 @@ def _int_env(name: str, default: int) -> int:
 # Keep DB_POOL_SIZE + DB_MAX_OVERFLOW (times the number of API + worker processes) under the
 # database's max_connections. pool_pre_ping replaces connections the platform silently dropped.
 _pool_kwargs = {}
-if ":memory:" not in DATABASE_URL:
+if _use_null_pool:
+    _pool_kwargs = {"poolclass": NullPool}
+elif ":memory:" not in DATABASE_URL:
     _pool_kwargs = {
         "pool_size": _int_env("DB_POOL_SIZE", 20),
         "max_overflow": _int_env("DB_MAX_OVERFLOW", 20),
