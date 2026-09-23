@@ -40,7 +40,12 @@ def _offline(monkeypatch, source_repo, tmp_path):
     def fake_clone(url, token=None):
         counter["n"] += 1
         dest = tmp_path / f"clone{counter['n']}"
-        shutil.copytree(source_repo, dest)  # cleanup() deletes it, like a real clone
+        # Ignore lock files: a real `git clone` reads objects over the git
+        # protocol rather than copying the filesystem, so it never sees
+        # git's background maintenance briefly locking the source repo's
+        # object store -- copytree does, and can otherwise race it (list a
+        # *.lock file, then find it gone by the time it tries to copy it).
+        shutil.copytree(source_repo, dest, ignore=shutil.ignore_patterns("*.lock"))
         return dest
 
     monkeypatch.setattr(orchestrator, "clone_repo", fake_clone)
