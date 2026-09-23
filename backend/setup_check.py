@@ -1,7 +1,7 @@
 """Checks that the deployment is configured correctly.
 
     python -m backend.setup_check                      static checks of the environment
-    python -m backend.setup_check --live               + read-only network checks (Clerk keys, Whop API key)
+    python -m backend.setup_check --live               + read-only network checks (Supabase JWKS, Whop API key)
     python -m backend.setup_check --api https://...    + call /healthz and /readyz on a running API
     python -m backend.setup_check --sentry-test        + send one test event to Sentry
 
@@ -73,21 +73,27 @@ def check_cors_and_frontend(env) -> list[Result]:
     return out
 
 
-def check_clerk(env) -> list[Result]:
-    if not _has(env, "CLERK_JWKS_URL"):
-        return [Result("SKIP", "clerk sign-in", "CLERK_JWKS_URL unset: everyone is anonymous")]
+def check_supabase_auth(env) -> list[Result]:
+    has_secret, has_jwks = _has(env, "SUPABASE_JWT_SECRET"), _has(env, "SUPABASE_JWKS_URL")
+    if not has_secret and not has_jwks:
+        return [Result("SKIP", "supabase sign-in", "SUPABASE_JWT_SECRET/SUPABASE_JWKS_URL unset: everyone is anonymous")]
     out = []
-    url = env["CLERK_JWKS_URL"]
-    out.append(Result("OK" if _https(url) else "FAIL", "clerk jwks url", "https" if _https(url) else "must be https"))
-    if not url.rstrip("/").endswith("jwks.json"):
-        out.append(Result("WARN", "clerk jwks url", "usually ends in /.well-known/jwks.json"))
+    if has_secret and has_jwks:
+        out.append(Result("WARN", "supabase sign-in", "both SUPABASE_JWT_SECRET and SUPABASE_JWKS_URL set; JWKS takes priority"))
+    if has_jwks:
+        url = env["SUPABASE_JWKS_URL"]
+        out.append(Result("OK" if _https(url) else "FAIL", "supabase jwks url", "https" if _https(url) else "must be https"))
+        if not url.rstrip("/").endswith("jwks.json"):
+            out.append(Result("WARN", "supabase jwks url", "usually ends in /auth/v1/.well-known/jwks.json"))
+    else:
+        out.append(Result("OK", "supabase jwt secret", "set"))
     out.append(
-        Result("OK", "clerk issuer", "set") if _has(env, "CLERK_ISSUER")
-        else Result("WARN", "clerk issuer", "CLERK_ISSUER unset: token issuer is not checked")
+        Result("OK", "supabase url", "set") if _has(env, "SUPABASE_URL")
+        else Result("WARN", "supabase url", "SUPABASE_URL unset: token issuer is not checked")
     )
     out.append(
-        Result("OK", "clerk authorized parties", "set") if _has(env, "CLERK_AUTHORIZED_PARTIES")
-        else Result("WARN", "clerk authorized parties", "CLERK_AUTHORIZED_PARTIES unset: any frontend origin's tokens are accepted")
+        Result("OK", "supabase authorized parties", "set") if _has(env, "SUPABASE_AUTHORIZED_PARTIES")
+        else Result("WARN", "supabase authorized parties", "SUPABASE_AUTHORIZED_PARTIES unset: any frontend origin's tokens are accepted (only relevant for custom OIDC clients; Supabase's own tokens carry no azp)")
     )
     return out
 
@@ -266,7 +272,7 @@ def check_capacity(env) -> list[Result]:
 
 
 STATIC_CHECKS = (
-    check_database, check_cors_and_frontend, check_clerk, check_github_oauth, check_whop,
+    check_database, check_cors_and_frontend, check_supabase_auth, check_github_oauth, check_whop,
     check_admin_and_limits, check_capacity, check_secrets_hygiene, check_tools,
 )
 
@@ -274,18 +280,18 @@ STATIC_CHECKS = (
 # ------------------------------------------------------------------- live
 
 
-def live_clerk(env) -> list[Result]:
-    url = env.get("CLERK_JWKS_URL", "")
+def live_supabase_auth(env) -> list[Result]:
+    url = env.get("SUPABASE_JWKS_URL", "")
     if not url:
         return []
     try:
         resp = requests.get(url, timeout=10)
         keys = resp.json().get("keys", []) if resp.ok else []
     except (requests.RequestException, ValueError):
-        return [Result("FAIL", "clerk jwks (live)", "could not fetch or parse the key set")]
+        return [Result("FAIL", "supabase jwks (live)", "could not fetch or parse the key set")]
     if not keys:
-        return [Result("FAIL", "clerk jwks (live)", f"HTTP {resp.status_code}, no signing keys found. Wrong URL?")]
-    return [Result("OK", "clerk jwks (live)", f"{len(keys)} signing key(s)")]
+        return [Result("FAIL", "supabase jwks (live)", f"HTTP {resp.status_code}, no signing keys found. Wrong URL?")]
+    return [Result("OK", "supabase jwks (live)", f"{len(keys)} signing key(s)")]
 
 
 def live_whop(env) -> list[Result]:
@@ -350,7 +356,7 @@ def run_checks(env: Mapping[str, str], live: bool = False, api: str | None = Non
     for check in STATIC_CHECKS:
         results.extend(check(env))
     if live:
-        results.extend(live_clerk(env))
+        results.extend(live_supabase_auth(env))
         results.extend(live_whop(env))
     if api:
         results.extend(live_api(api))

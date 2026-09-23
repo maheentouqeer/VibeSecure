@@ -32,9 +32,9 @@ GOOD = {
     "DATABASE_URL": "postgresql+psycopg2://u:p@host/db",
     "ALLOWED_ORIGINS": "https://app.example.test",
     "FRONTEND_URL": "https://app.example.test",
-    "CLERK_JWKS_URL": "https://clerk.example.test/.well-known/jwks.json",
-    "CLERK_ISSUER": "https://clerk.example.test",
-    "CLERK_AUTHORIZED_PARTIES": "https://app.example.test",
+    "SUPABASE_JWKS_URL": "https://project-ref.supabase.test/auth/v1/.well-known/jwks.json",
+    "SUPABASE_URL": "https://project-ref.supabase.test",
+    "SUPABASE_AUTHORIZED_PARTIES": "https://app.example.test",
     "GITHUB_OAUTH_CLIENT_ID": "cid",
     "GITHUB_OAUTH_CLIENT_SECRET": "csecret",
     "GITHUB_OAUTH_REDIRECT_URI": "https://api.example.test/integrations/github/callback",
@@ -59,7 +59,7 @@ def test_a_complete_configuration_has_no_failures_and_no_config_warnings():
 def test_an_empty_environment_is_skips_and_warnings_not_failures():
     results = run_checks({})
     assert not [r for r in results if r.status == "FAIL"]
-    assert _status(results, "clerk sign-in") == ["SKIP"] and _status(results, "whop billing") == ["SKIP"]
+    assert _status(results, "supabase sign-in") == ["SKIP"] and _status(results, "whop billing") == ["SKIP"]
     assert _status(results, "database") == ["WARN"]
 
 
@@ -69,9 +69,9 @@ def test_an_empty_environment_is_skips_and_warnings_not_failures():
         ({"DATABASE_URL": "mysql://x"}, "database", "FAIL"),
         ({"DATABASE_URL": "sqlite:///x.db"}, "database", "WARN"),
         ({"ALLOWED_ORIGINS": "http://localhost:3000"}, "cors", "WARN"),
-        ({"CLERK_JWKS_URL": "http://clerk.test/jwks.json"}, "clerk jwks url", "FAIL"),
-        ({"CLERK_JWKS_URL": "https://clerk.test/jwks.json"}, "clerk issuer", "WARN"),
-        ({"CLERK_JWKS_URL": "https://clerk.test/jwks.json"}, "clerk authorized parties", "WARN"),
+        ({"SUPABASE_JWKS_URL": "http://project.test/jwks.json"}, "supabase jwks url", "FAIL"),
+        ({"SUPABASE_JWKS_URL": "https://project.test/jwks.json"}, "supabase url", "WARN"),
+        ({"SUPABASE_JWKS_URL": "https://project.test/jwks.json"}, "supabase authorized parties", "WARN"),
         ({"ADMIN_API_KEY": "short"}, "admin api", "FAIL"),
         ({"RATE_LIMIT_STORE": "redis"}, "rate limit store", "FAIL"),
         ({"SCAN_WORKER_MODE": "nonsense"}, "workers", "FAIL"),
@@ -142,22 +142,22 @@ def _patch_get(monkeypatch, handler):
     monkeypatch.setattr(setup_check.requests, "get", handler)
 
 
-def test_live_clerk_reports_the_number_of_signing_keys(monkeypatch):
+def test_live_supabase_auth_reports_the_number_of_signing_keys(monkeypatch):
     _patch_get(monkeypatch, lambda url, **kw: _Resp(200, {"keys": [{"kid": "a"}, {"kid": "b"}]}))
-    assert run_checks(GOOD, live=True) and _status(run_checks(GOOD, live=True), "clerk jwks (live)") == ["OK"]
+    assert run_checks(GOOD, live=True) and _status(run_checks(GOOD, live=True), "supabase jwks (live)") == ["OK"]
 
 
 @pytest.mark.parametrize(
     "resp", [_Resp(404, {"error": "no"}), _Resp(200, {"keys": []}), _Resp(200, None), requests.ConnectionError("down")]
 )
-def test_live_clerk_failures(monkeypatch, resp):
+def test_live_supabase_auth_failures(monkeypatch, resp):
     def get(url, **kw):
         if isinstance(resp, Exception):
             raise resp
         return resp
 
     _patch_get(monkeypatch, get)
-    assert _status(run_checks(GOOD, live=True), "clerk jwks (live)") == ["FAIL"]
+    assert _status(run_checks(GOOD, live=True), "supabase jwks (live)") == ["FAIL"]
 
 
 @pytest.mark.parametrize("status, expected", [(200, "OK"), (401, "FAIL"), (403, "WARN"), (500, "WARN")])

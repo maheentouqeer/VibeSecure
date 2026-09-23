@@ -20,7 +20,7 @@ Safety properties:
     pending they hold a seat against the plan's member limit.
   * An invite created for an email address only works for that address. The
     address comes from the sign-in token, so include the email claim in your
-    Clerk session token; otherwise create link-only invites (no email).
+    Supabase Auth session token; otherwise create link-only invites (no email).
   * Unknown, expired, revoked and used tokens all get the same answer, so the
     endpoint can't be used to learn which tokens exist.
   * Only owners can create admin invites; admins can create member invites.

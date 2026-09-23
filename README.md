@@ -175,7 +175,7 @@ Open [http://localhost:3000](http://localhost:3000) in your web browser.
 
 Everything works anonymously out of the box. To add real accounts:
 
-- **Sign-in (Clerk):** set `CLERK_JWKS_URL` (and ideally `CLERK_ISSUER` and `CLERK_AUTHORIZED_PARTIES`). The frontend sends the Clerk session token as `Authorization: Bearer <token>`. A request with an invalid token is rejected with `401`, never treated as anonymous.
+- **Sign-in (Supabase Auth):** set `SUPABASE_JWT_SECRET` (or `SUPABASE_JWKS_URL` if the project uses asymmetric JWT signing keys), and ideally `SUPABASE_URL` and `SUPABASE_AUTHORIZED_PARTIES`. The frontend sends the Supabase session token as `Authorization: Bearer <token>`. A request with an invalid token is rejected with `401`, never treated as anonymous.
 - **Claiming scans:** after sign-in, `POST /me/claim` (with the browser's `X-Owner-Token`) moves that browser's anonymous scans into the account. From then on the old token no longer grants access to them.
 - **Plans:** `GET /me` returns the plan, limits, and this month's usage. Limits are only enforced when `ENFORCE_PLAN_LIMITS=1` (free: 5 scans/month, no re-scan on push, 1 org seat; pro: unlimited, re-scan on push; team: 5 seats). Over-limit requests get `402`.
 - **Billing:** `POST /webhooks/billing` (needs `BILLING_WEBHOOK_SECRET`, HMAC-SHA256 in `X-Billing-Signature: sha256=<hex>`) accepts provider-neutral events: `subscription.activated|updated|canceled|expired` with `plan` (`pro` for a `user`, `team` for an `org_id`), `provider_subscription_id`, optional `status` and `current_period_end`. Connect a payment provider (Whop, Stripe, Paddle, ...) by mapping its events to this shape. A canceled subscription stays active until the period the customer paid for ends.
@@ -201,7 +201,7 @@ Explanations and fix prompts are written by Google's Gemini. Before anything rea
 
 ## Checking Your Setup
 
-`python -m backend.setup_check` inspects the environment and reports what is misconfigured (`--live` adds read-only checks of Clerk and the Whop key, `--api URL` checks a running API's health, `--sentry-test` sends a test event). It never prints secrets and exits `1` on any failure. `GO_LIVE.md` is the step-by-step checklist for connecting the real services.
+`python -m backend.setup_check` inspects the environment and reports what is misconfigured (`--live` adds read-only checks of the Supabase JWKS endpoint and the Whop key, `--api URL` checks a running API's health, `--sentry-test` sends a test event). It never prints secrets and exits `1` on any failure. `GO_LIVE.md` is the step-by-step checklist for connecting the real services.
 
 ## Load Testing
 
@@ -214,7 +214,7 @@ Explanations and fix prompts are written by Google's Gemini. Before anything rea
 
 ## Invite Links
 
-Adding a member by email only works if they have already signed in once. Invite links work for anyone: `POST /orgs/{id}/invites` (owner/admin; body `{"email": optional, "role": "member"|"admin"}`) returns a single-use `token` (shown once; only its hash is stored) and, if `FRONTEND_URL` is set, a ready link `FRONTEND_URL?invite=<token>`. Share it however you like. The invitee signs up, then the frontend calls `GET /invites/preview?token=` (no sign-in; shows the organization and role) and `POST /invites/accept` `{"token": ...}` (signed in). Links expire after `INVITE_TTL_DAYS` (default 7), can be revoked (`DELETE /orgs/{id}/invites/{invite}`), work exactly once even under simultaneous clicks, hold a seat while pending, and unknown/expired/used tokens all get the same answer. Only owners can create admin invites. If an invite names an email address, only that address can accept it. The address comes from the sign-in token, so add the email claim to your Clerk session token, or create link-only invites. There is no email delivery yet; the link is yours to send.
+Adding a member by email only works if they have already signed in once. Invite links work for anyone: `POST /orgs/{id}/invites` (owner/admin; body `{"email": optional, "role": "member"|"admin"}`) returns a single-use `token` (shown once; only its hash is stored) and, if `FRONTEND_URL` is set, a ready link `FRONTEND_URL?invite=<token>`. Share it however you like. The invitee signs up, then the frontend calls `GET /invites/preview?token=` (no sign-in; shows the organization and role) and `POST /invites/accept` `{"token": ...}` (signed in). Links expire after `INVITE_TTL_DAYS` (default 7), can be revoked (`DELETE /orgs/{id}/invites/{invite}`), work exactly once even under simultaneous clicks, hold a seat while pending, and unknown/expired/used tokens all get the same answer. Only owners can create admin invites. If an invite names an email address, only that address can accept it. The address comes from the sign-in token, so add the email claim to your Supabase Auth session token, or create link-only invites. There is no email delivery yet; the link is yours to send.
 
 ## Organization Roles
 
@@ -264,7 +264,7 @@ Pro/Team users can scan their private GitHub repos through their own account. Cr
 
 ## Whop Billing
 
-`POST /webhooks/whop` verifies Whop's Standard Webhooks signature (secret in `WHOP_WEBHOOK_SECRET`) and maps membership events to plans via `WHOP_PLAN_MAP`. Create the Whop checkout with metadata `{"clerk_user_id": "<Clerk id>"}` for Pro, or `{"clerk_user_id": "...", "org_id": "<org id>"}` for Team, so the purchase is tied to the right account. Purchases made before the customer first signs in are kept and completed at first sign-in, and out-of-order retries can't undo newer events. Test it with a Whop test webhook before going live.
+`POST /webhooks/whop` verifies Whop's Standard Webhooks signature (secret in `WHOP_WEBHOOK_SECRET`) and maps membership events to plans via `WHOP_PLAN_MAP`. Create the Whop checkout with metadata `{"clerk_user_id": "<the signed-in user's id>"}` for Pro, or `{"clerk_user_id": "...", "org_id": "<org id>"}` for Team, so the purchase is tied to the right account (the field is still named `clerk_user_id` -- it holds whichever auth provider's `sub` claim `backend/auth.py` verifies, now Supabase's). Purchases made before the customer first signs in are kept and completed at first sign-in, and out-of-order retries can't undo newer events. Test it with a Whop test webhook before going live.
 
 ---
 

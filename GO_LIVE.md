@@ -7,8 +7,9 @@ services. Work top to bottom; each step says what "working" looks like.
 
 | For | You need | Required? |
 |---|---|---|
-| Hosting | Railway (or similar) with Postgres | yes |
-| Sign-in | a Clerk application | for accounts |
+| Hosting | Railway (or similar) | yes |
+| Database | Supabase Postgres (or another hosted Postgres) | yes |
+| Sign-in | Supabase Auth (same project as the database) | for accounts |
 | Private repos | a GitHub OAuth App | optional |
 | Billing | a Whop company, plans, an API key | optional |
 | Errors | a Sentry project | recommended |
@@ -25,10 +26,10 @@ services. Work top to bottom; each step says what "working" looks like.
 
 | Feature | Variables |
 |---|---|
-| Database | `DATABASE_URL` (Postgres) |
+| Database | `DATABASE_URL` (Postgres -- see `.env.example` for the Supabase direct-vs-pooler split) |
 | CORS | `ALLOWED_ORIGINS` = your frontend origin(s) |
 | AI text | `GEMINI_API_KEY` |
-| Sign-in | `CLERK_JWKS_URL`, `CLERK_ISSUER`, `CLERK_AUTHORIZED_PARTIES` |
+| Sign-in | `SUPABASE_JWT_SECRET` (or `SUPABASE_JWKS_URL`), `SUPABASE_URL`, `SUPABASE_AUTHORIZED_PARTIES` |
 | Private repos | `GITHUB_OAUTH_CLIENT_ID`, `GITHUB_OAUTH_CLIENT_SECRET`, `GITHUB_OAUTH_REDIRECT_URI`, `TOKEN_ENCRYPTION_KEY`, `FRONTEND_URL` |
 | Billing | `WHOP_WEBHOOK_SECRET`, `WHOP_PLAN_MAP`, `WHOP_API_KEY` |
 | Admin | `ADMIN_API_KEY` (24+ random characters) |
@@ -49,7 +50,7 @@ Fix every `FAIL`. It never prints secrets and exits `1` if anything fails, so it
 
 ## 4. Verify each integration
 
-**Sign-in (Clerk).** With a real session token in `$TOKEN`:
+**Sign-in (Supabase Auth).** With a real session token in `$TOKEN` (from `supabase.auth.getSession()` on the frontend):
 `curl -H "Authorization: Bearer $TOKEN" https://YOUR-API/me` should return your user, `"plan": "free"`.
 A wrong or expired token must return `401`, never an anonymous response.
 

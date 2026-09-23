@@ -6,7 +6,7 @@ local dev), and exposes scan + badge endpoints.
 
 Ownership: sign-in is optional. Anonymous users get an opaque X-Owner-Token
 from POST /scans that must be presented on every later request for that
-scan. Signed-in users (Clerk session token in `Authorization: Bearer`) own
+scan. Signed-in users (Supabase Auth session token in `Authorization: Bearer`) own
 their scans by account instead, and can claim earlier anonymous scans with
 POST /me/claim. See backend/access.py for the exact access rules,
 backend/auth.py for token verification, backend/plans.py for plan limits and

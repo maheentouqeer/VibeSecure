@@ -1,5 +1,6 @@
-"""Accounts layer: Clerk JWT verification, ownership/claiming, plans and
-metering, organizations and the organizer dashboard, and the billing webhook.
+"""Accounts layer: Supabase Auth JWT verification, ownership/claiming, plans
+and metering, organizations and the organizer dashboard, and the billing
+webhook.
 
 Tokens are real RS256 JWTs signed with a key generated per test session; only
 the JWKS network fetch is replaced (by a client that returns that key)."""
@@ -20,7 +21,8 @@ from jwt.exceptions import PyJWKClientConnectionError, PyJWKClientError
 from backend import auth, db, limits, main
 from backend.db import Base, engine
 
-ISSUER = "https://clerk.example.test"
+SUPABASE_URL = "https://project-ref.supabase.test"
+ISSUER = f"{SUPABASE_URL}/auth/v1"
 REPO = "https://github.com/example/app"
 BILLING_SECRET = "bill-secret"
 
@@ -64,7 +66,7 @@ def _env(monkeypatch):
     Base.metadata.create_all(bind=engine)
     limits.ip_limiter.reset()
     for var in (
-        "CLERK_ISSUER", "CLERK_AUTHORIZED_PARTIES", "ENFORCE_PLAN_LIMITS",
+        "SUPABASE_URL", "SUPABASE_AUTHORIZED_PARTIES", "ENFORCE_PLAN_LIMITS",
         "DAILY_SCAN_CAP", "GITHUB_WEBHOOK_SECRET", "BILLING_WEBHOOK_SECRET",
     ):
         monkeypatch.delenv(var, raising=False)
@@ -81,7 +83,9 @@ def client():
 
 
 def _jwt(sub="user_1", email=None, pem=_PEM, exp_in=300, **claims):
-    payload = {"sub": sub, "exp": int(time.time()) + exp_in, "iat": int(time.time()), **claims}
+    # Real Supabase tokens always carry aud="authenticated"; tests that care
+    # about a missing/different aud pass it explicitly via **claims.
+    payload = {"sub": sub, "aud": "authenticated", "exp": int(time.time()) + exp_in, "iat": int(time.time()), **claims}
     if email:
         payload["email"] = email
     return jwt.encode(payload, pem, algorithm="RS256")
@@ -179,17 +183,40 @@ def test_unsigned_alg_none_token_is_rejected(client):
 
 
 def test_issuer_is_enforced_when_configured(client, monkeypatch):
-    monkeypatch.setenv("CLERK_ISSUER", ISSUER)
+    monkeypatch.setenv("SUPABASE_URL", SUPABASE_URL)
     assert client.get("/me", headers=_as(iss=ISSUER)).status_code == 200
     assert client.get("/me", headers=_as(iss="https://evil.test")).status_code == 401
     assert client.get("/me", headers=_as()).status_code == 401  # no iss at all
 
 
 def test_authorized_parties_are_enforced_when_configured(client, monkeypatch):
-    monkeypatch.setenv("CLERK_AUTHORIZED_PARTIES", "https://app.example.test, http://localhost:3000")
+    monkeypatch.setenv("SUPABASE_AUTHORIZED_PARTIES", "https://app.example.test, http://localhost:3000")
     assert client.get("/me", headers=_as(azp="http://localhost:3000")).status_code == 200
     assert client.get("/me", headers=_as(azp="https://evil.test")).status_code == 401
-    assert client.get("/me", headers=_as()).status_code == 401
+    assert client.get("/me", headers=_as()).status_code == 401  # no azp at all
+
+
+def test_mismatched_audience_is_rejected(client):
+    assert client.get("/me", headers=_as(aud="some-other-app")).status_code == 401
+    assert client.get("/me", headers=_as(aud=None)).status_code == 200  # absent aud: allowed, only a mismatch is rejected
+
+
+def test_shared_secret_mode_verifies_hs256_tokens(client, monkeypatch):
+    """The default Supabase config (no asymmetric JWT signing keys): a shared
+    HS256 secret instead of a JWKS endpoint."""
+    monkeypatch.setattr(auth, "_get_jwks_client", lambda: None)
+    monkeypatch.setenv("SUPABASE_JWT_SECRET", "the-project-jwt-secret")
+    good = jwt.encode(
+        {"sub": "user_hs", "aud": "authenticated", "email": "hs@x.test", "exp": int(time.time()) + 300},
+        "the-project-jwt-secret", algorithm="HS256",
+    )
+    assert client.get("/me", headers={"Authorization": f"Bearer {good}"}).json()["user"]["email"] == "hs@x.test"
+
+    wrong = jwt.encode(
+        {"sub": "user_hs", "aud": "authenticated", "exp": int(time.time()) + 300},
+        "not-the-secret", algorithm="HS256",
+    )
+    assert client.get("/me", headers={"Authorization": f"Bearer {wrong}"}).status_code == 401
 
 
 def test_unknown_signing_key_is_401_and_unreachable_provider_is_503(client, monkeypatch):
