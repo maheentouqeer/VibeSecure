@@ -48,9 +48,30 @@ def scan_path(repo_path: Path) -> tuple[list[dict], str]:
 
 
 def enrich(raw_findings: list[dict], platform: str) -> list[dict]:
-    """Triage, explain, and write a fix prompt for each raw finding."""
+    """Triage, explain, and write a fix prompt for each raw finding.
+
+    Backfills `line` and `message` from the original scanner evidence
+    before handing findings to the Explainer/Fix-Prompt agents. Triage's
+    own contract only guarantees category/label/file/severity/table
+    (see agents/triage_agent.py) -- it silently drops any other field,
+    which meant the LLM agents were writing explanations and fix prompts
+    for code they'd never actually seen (flagged in CODE_REVIEW.md, C3).
+    Fixing it here, in the shared handoff point, avoids widening triage's
+    own contract and touching agents/triage_agent.py at all.
+    """
+    evidence_by_key = {
+        (f.get("category"), f.get("label"), f.get("file")): f
+        for f in raw_findings
+    }
+
     enriched = []
     for finding in triage(raw_findings):
+        key = (finding.get("category"), finding.get("label"), finding.get("file"))
+        original = evidence_by_key.get(key)
+        if original:
+            finding.setdefault("line", original.get("line"))
+            finding.setdefault("message", original.get("message"))
+
         explanation = explain(finding)
         fix_prompt = generate_fix_prompt(finding, platform)
         enriched.append({**finding, **explanation, "fix_prompt": fix_prompt})
