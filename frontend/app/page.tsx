@@ -24,7 +24,7 @@ import {
 } from "lucide-react";
 
 import { API_URL, createScan, rescanScan, listScans, ApiError, type ApiScan, type ApiFinding } from "@/lib/api";
-
+import Link from 'next/link';
 // ---------------------------------------------------------------------------
 // Types
 // ---------------------------------------------------------------------------
@@ -308,12 +308,6 @@ function Header({
         </button>
 
         <nav className="flex items-center gap-4 text-sm">
-          <button
-            onClick={goHome}
-            className={`hidden sm:inline transition ${screen === "home" ? `font-semibold ${t.navLinkActive}` : t.navLink}`}
-          >
-            Home
-          </button>
 
           {showHistoryLink && (
             <button
@@ -335,12 +329,13 @@ function Header({
             {isDark ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
           </button>
 
-          <button
-            onClick={toggleSignIn}
-            className={`rounded-md border px-3 py-1.5 transition ${t.ghostBtn}`}
-          >
-            {isSignedIn ? "Sign out" : "Sign in"}
-          </button>
+          <Link
+  href="/login"
+  onClick={toggleSignIn}
+  className={`inline-flex items-center justify-center rounded-md border px-3 py-1.5 transition ${t.ghostBtn}`}
+>
+  {isSignedIn ? "Sign out" : "Sign in"}
+</Link>
         </nav>
       </div>
     </header>
@@ -384,7 +379,7 @@ function HomeScreen({
       <h1 className={`mt-6 text-4xl font-bold tracking-tight sm:text-5xl ${t.heading}`}>
         Ship fast. Stay{" "}
         <span
-          className={`bg-clip-text text-transparent bg-gradient-to-r ${
+          className={`bg-clip-text text-transparent bg-linear-to-r ${
             isDark ? "from-emerald-400 to-cyan-400" : "from-emerald-500 to-cyan-500"
           }`}
         >
@@ -402,7 +397,7 @@ function HomeScreen({
             isDark ? "border-red-500/30 bg-red-500/10 text-red-300" : "border-red-300 bg-red-50 text-red-700"
           }`}
         >
-          <AlertTriangle className="mt-0.5 h-4 w-4 flex-shrink-0" />
+          <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
           <span>{error}</span>
         </div>
       )}
@@ -491,13 +486,13 @@ function ScanningScreen({
             return (
               <div key={step.id} className="flex items-center gap-3">
                 {state === "done" && (
-                  <CheckCircle2 className={`h-5 w-5 flex-shrink-0 ${isDark ? "text-emerald-400" : "text-emerald-500"}`} />
+                  <CheckCircle2 className={`h-5 w-5 shrink-0 ${isDark ? "text-emerald-400" : "text-emerald-500"}`} />
                 )}
                 {state === "active" && (
-                  <Loader2 className={`h-5 w-5 flex-shrink-0 animate-spin ${isDark ? "text-cyan-400" : "text-cyan-500"}`} />
+                  <Loader2 className={`h-5 w-5 shrink-0 animate-spin ${isDark ? "text-cyan-400" : "text-cyan-500"}`} />
                 )}
                 {state === "pending" && (
-                  <Circle className={`h-5 w-5 flex-shrink-0 ${isDark ? "text-slate-700" : "text-slate-300"}`} />
+                  <Circle className={`h-5 w-5 shrink-0 ${isDark ? "text-slate-700" : "text-slate-300"}`} />
                 )}
                 <span
                   className={`text-sm ${
@@ -518,7 +513,7 @@ function ScanningScreen({
           </div>
           <div className={`h-2 w-full overflow-hidden rounded-full ${isDark ? "bg-slate-800" : "bg-slate-200"}`}>
             <div
-              className="h-full rounded-full bg-gradient-to-r from-emerald-500 to-cyan-500 transition-all duration-300 ease-out"
+              className="h-full rounded-full bg-linear-to-r from-emerald-500 to-cyan-500 transition-all duration-300 ease-out"
               style={{ width: `${progress}%` }}
             />
           </div>
@@ -593,9 +588,9 @@ function FindingCard({
           </div>
         </div>
         {isExpanded ? (
-          <ChevronUp className={`h-4 w-4 flex-shrink-0 ${t.mutedText}`} />
+          <ChevronUp className={`h-4 w-4 shrink-0 ${t.mutedText}`} />
         ) : (
-          <ChevronDown className={`h-4 w-4 flex-shrink-0 ${t.mutedText}`} />
+          <ChevronDown className={`h-4 w-4 shrink-0 ${t.mutedText}`} />
         )}
       </button>
 
@@ -743,7 +738,7 @@ function ResultsScreen({
             isDark ? "border-red-500/30 bg-red-500/10 text-red-300" : "border-red-300 bg-red-50 text-red-700"
           }`}
         >
-          <AlertTriangle className="mt-0.5 h-4 w-4 flex-shrink-0" />
+          <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
           <span>{error}</span>
         </div>
       )}
@@ -776,7 +771,7 @@ function ResultsScreen({
             isDark ? "border-amber-500/30 bg-amber-500/10 text-amber-300" : "border-amber-300 bg-amber-50 text-amber-700"
           }`}
         >
-          <AlertTriangle className="mt-0.5 h-4 w-4 flex-shrink-0" />
+          <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
           <span>
             Resolve all {openCriticalHigh} remaining Critical/High finding{openCriticalHigh === 1 ? "" : "s"} to
             unlock the badge.
@@ -834,8 +829,8 @@ function BadgeScreen({
       <div
         className={`mx-auto flex flex-col items-center rounded-2xl border p-8 shadow-xl ${
           isDark
-            ? "border-emerald-500/30 bg-gradient-to-b from-emerald-500/10 to-slate-900"
-            : "border-emerald-300 bg-gradient-to-b from-emerald-50 to-white"
+            ? "border-emerald-500/30 bg-linear-to-b from-emerald-500/10 to-slate-900"
+            : "border-emerald-300 bg-linear-to-b from-emerald-50 to-white"
         }`}
       >
         <div className="flex h-16 w-16 items-center justify-center rounded-full bg-emerald-500 shadow-lg shadow-emerald-500/30">
@@ -961,7 +956,7 @@ function HistoryScreen({
                   onClick={() => onOpenScan(s.id)}
                   className={`cursor-pointer border-t transition ${t.rowBorder} ${t.tableBg} ${t.rowHover}`}
                 >
-                  <td className={`max-w-[220px] truncate px-4 py-3 font-medium ${isDark ? "text-slate-200" : "text-slate-700"}`}>
+                  <td className={`max-w-55 truncate px-4 py-3 font-medium ${isDark ? "text-slate-200" : "text-slate-700"}`}>
                     {s.repoUrl}
                   </td>
                   <td className={`px-4 py-3 ${t.mutedText}`}>{formatDate(s.date)}</td>
