@@ -1,5 +1,8 @@
 # Bolt.new & v0 (Next.js / Vite) Platform Security Reference
 
+Source: Next.js and Vite environment variable documentation.
+Last reviewed: 2026-10-01.
+
 ## Client vs. Server Secrets in Modern Frontend Frameworks
 Bolt.new and v0 generate full-stack applications typically using Next.js (App Router or Pages Router) or Vite + React.
 

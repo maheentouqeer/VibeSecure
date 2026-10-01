@@ -240,3 +240,14 @@ def test_real_high_entropy_secret_is_still_detected(tmp_path):
     labels = sorted(f["label"] for f in scan_secrets(tmp_path))
     assert any(label.startswith("High Entropy Secret") for label in labels)
     assert "AWS Access Key" in labels
+
+    aws = next(f for f in scan_secrets(tmp_path) if f["label"] == "AWS Access Key")
+    assert aws["line"] == 1
+    assert "[secret redacted]" in aws["snippet"]
+    assert "AKIA1234567890ABCDEF" not in aws["snippet"]
+
+
+def test_same_secret_match_is_reported_once(tmp_path):
+    _write(tmp_path, "server.py", "KEY = 'AIzaSyA1B2C3D4E5F6G7H8I9J0K1L2M3N4O5P6'\n")
+    findings = scan_secrets(tmp_path)
+    assert len(findings) == 1

@@ -1,5 +1,8 @@
 # Replit Platform Security & Hardening Reference
 
+Source: Replit Secrets documentation, https://docs.replit.com/replit-workspace/workspace-features/secrets.
+Last reviewed: 2026-10-01.
+
 ## Secrets Management in Replit
 Replit environments run in cloud containers and are frequently shared, forked, or deployed to public URLs.
 

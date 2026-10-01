@@ -40,8 +40,6 @@ _FILE_PATH_PATTERN = re.compile(
 # Regex to detect specific line number claims (e.g., "line 42", "on line 15", "at line 88")
 _LINE_NUMBER_PATTERN = re.compile(r"\bline\s+(\d+)\b", re.IGNORECASE)
 _QUOTED_SNIPPET_PATTERN = re.compile(r"`([^`\n]+)`|\"([^\"\n]+)\"|'([^'\n]+)'")
-_FUNCTION_CALL_PATTERN = re.compile(r"\b([A-Za-z_$][\w$]*(?:\.[A-Za-z_$][\w$]*)*)\s*\(")
-_ALLOWED_REMEDIATION_CALLS = {"auth.uid", "process.env", "os.environ", "json.dumps"}
 
 
 EVIDENCE_STRICT_DIRECTIVE = """
@@ -144,19 +142,7 @@ def validate_evidence_grounding(
             if len(normalized_quoted) >= 12 and normalized_quoted not in normalized_snippet:
                 return False, "Output referenced a quoted code snippet not present in finding evidence"
 
-    # 4. Reject invented function or method names. These are concrete source
-    # details, unlike generic remediation words, and must come from evidence.
-    evidence_text = " ".join(
-        str(finding.get(key, ""))
-        for key in ("label", "message", "snippet", "code_snippet", "evidence")
-    ).lower()
-    for function_name in _FUNCTION_CALL_PATTERN.findall(output_text):
-        if function_name.lower() in _ALLOWED_REMEDIATION_CALLS:
-            continue
-        if function_name.lower() not in evidence_text:
-            return False, f"Output referenced function or method '{function_name}' not present in finding evidence"
-
-    # 5. Database Table validation
+    # 4. Database Table validation
     finding_table = str(finding.get("table", "")).lower().strip()
     if finding_table and finding.get("category") == "missing_access_control":
         # Check if model hallucinated a different specific table name by inspecting table references

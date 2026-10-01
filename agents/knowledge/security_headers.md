@@ -1,5 +1,8 @@
 # HTTP Security Headers Reference Standard
 
+Source: OWASP Secure Headers Project, https://owasp.org/www-project-secure-headers/.
+Last reviewed: 2026-10-01.
+
 ## Essential Defensive Headers
 
 ### 1. X-Frame-Options

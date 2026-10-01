@@ -50,6 +50,26 @@ TEXT_EXTS = {".js", ".ts", ".tsx", ".jsx", ".py", ".env", ".json", ".yml", ".yam
 POTENTIAL_SECRET_STR_RE = re.compile(r"""['"]([^'"\s]{16,128})['"]""")
 
 
+def _masked_snippet(text: str, start: int, end: int) -> tuple[int, str]:
+    """Return the finding line and a small source excerpt with the secret removed."""
+    line_number = text.count("\n", 0, start) + 1
+    lines = text.splitlines()
+    first = max(0, line_number - 2)
+    last = min(len(lines), line_number + 1)
+    excerpt = lines[first:last]
+    offset = line_number - first - 1
+    if 0 <= offset < len(excerpt):
+        line = excerpt[offset]
+        line_start = text.rfind("\n", 0, start) + 1
+        line_end = text.find("\n", start)
+        if line_end < 0:
+            line_end = len(text)
+        local_start = max(0, start - line_start)
+        local_end = min(len(line), end - line_start)
+        excerpt[offset] = line[:local_start] + "[secret redacted]" + line[local_end:]
+    return line_number, "\n".join(excerpt)
+
+
 def shannon_entropy(data: str) -> float:
     """Calculate Shannon Entropy (bits per character) of a string."""
     if not data:
@@ -80,15 +100,22 @@ def scan_secrets(repo_path: Path) -> list[dict]:
 
         matched_spans = set()
 
-        # 1. Pattern matching
+        # 1. Pattern matching (ordered from specific provider keys to generic bearer tokens)
         for label, pattern in PATTERNS.items():
             for match in re.finditer(pattern, text):
-                matched_spans.add((match.start(), match.end()))
+                span = (match.start(), match.end())
+                # Avoid duplicate / overlapping regex match spans for the same token
+                if any(max(span[0], m_start) < min(span[1], m_end) for m_start, m_end in matched_spans):
+                    continue
+                matched_spans.add(span)
+                line, snippet = _masked_snippet(text, match.start(), match.end())
                 findings.append({
                     "category": "hardcoded_secret",
                     "label": label,
                     "file": file.relative_to(repo_path).as_posix(),
                     "match_preview": match.group(0)[:6] + "...(masked)",
+                    "line": line,
+                    "snippet": snippet,
                     "raw_severity": "critical",
                 })
 
@@ -110,12 +137,23 @@ def scan_secrets(repo_path: Path) -> list[dict]:
             # High entropy threshold for secrets (typically > 4.5 for alphanumeric strings)
             if entropy >= 4.5 and len(candidate) >= 16:
                 matched_spans.add(span)
+                line, snippet = _masked_snippet(text, match.start(), match.end())
                 findings.append({
                     "category": "hardcoded_secret",
                     "label": f"High Entropy Secret (entropy: {entropy:.2f})",
                     "file": file.relative_to(repo_path).as_posix(),
                     "match_preview": candidate[:6] + "...(masked)",
+                    "line": line,
+                    "snippet": snippet,
                     "raw_severity": "high",
                 })
 
-    return findings
+    unique_findings = []
+    seen = set()
+    for finding in findings:
+        key = (finding.get("category"), finding.get("file"), finding.get("match_preview"))
+        if key in seen:
+            continue
+        seen.add(key)
+        unique_findings.append(finding)
+    return unique_findings

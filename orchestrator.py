@@ -60,19 +60,27 @@ def enrich(raw_findings: list[dict], platform: str) -> list[dict]:
     own contract and touching agents/triage_agent.py at all.
     """
     evidence_by_key = {
-        (f.get("category"), f.get("label"), f.get("file")): f
+        (f.get("category"), f.get("label"), f.get("file"), f.get("table")): f
+        for f in raw_findings
+    }
+    evidence_by_category_file = {
+        (f.get("category"), f.get("file")): f
         for f in raw_findings
     }
 
     enriched = []
     for finding in triage(raw_findings):
-        key = (finding.get("category"), finding.get("label"), finding.get("file"))
-        original = evidence_by_key.get(key)
+        key = (finding.get("category"), finding.get("label"), finding.get("file"), finding.get("table"))
+        original = evidence_by_key.get(key) or evidence_by_category_file.get(
+            (finding.get("category"), finding.get("file"))
+        )
         if original:
-            finding.setdefault("line", original.get("line"))
-            finding.setdefault("message", original.get("message"))
+            for evidence_key in ("line", "message", "snippet", "match_preview"):
+                if original.get(evidence_key) is not None:
+                    finding.setdefault(evidence_key, original[evidence_key])
+        finding["platform"] = platform
 
-        explanation = explain(finding)
+        explanation = explain(finding, platform=platform)
         fix_prompt = generate_fix_prompt(finding, platform)
         enriched.append({**finding, **explanation, "fix_prompt": fix_prompt})
     return enriched

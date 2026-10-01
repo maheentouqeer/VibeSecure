@@ -149,7 +149,7 @@ def compute_metrics(tp: int, fp: int, fn: int) -> dict[str, float]:
 def evaluate_agents_grounding(all_findings: list[dict]) -> dict[str, Any]:
     """Evaluates agent-layer anti-hallucination grounding and platform awareness."""
     if not all_findings:
-        return {"total_evaluated": 0, "grounding_pass_rate": 1.0, "platform_alignment_rate": 1.0}
+        return {"total_evaluated": 0, "grounding_pass_rate": 0.0, "platform_alignment_rate": 0.0}
 
     triaged = triage(all_findings)
     total = len(triaged)

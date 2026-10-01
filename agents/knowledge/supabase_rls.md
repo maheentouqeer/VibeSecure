@@ -1,5 +1,8 @@
 # Supabase Row Level Security (RLS) Security Reference Guide
 
+Source: Supabase Row Level Security, https://supabase.com/docs/guides/database/postgres/row-level-security.
+Last reviewed: 2026-10-01.
+
 ## Vulnerability Overview: Missing Row Level Security
 In Supabase and PostgreSQL applications, Row Level Security (RLS) is an access control mechanism that restricts which rows in a table can be selected, inserted, updated, or deleted by different database roles and users.
 

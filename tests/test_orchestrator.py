@@ -90,3 +90,38 @@ def test_enrich_and_scan_path_work_on_a_local_directory_without_cloning(source_r
 
     assert platform == "generic"
     assert findings and all(f["what_it_means"] and f["fix_prompt"] for f in findings)
+
+
+def test_enrich_passes_platform_and_scanner_evidence_to_agents(monkeypatch):
+    observed = {}
+    raw_findings = [{
+        "category": "hardcoded_secret",
+        "label": "AWS Access Key",
+        "file": "src/config/aws.ts",
+        "line": 4,
+        "snippet": "const key = '[secret redacted]';",
+        "match_preview": "AKIA12...(masked)",
+        "raw_severity": "critical",
+    }]
+
+    monkeypatch.setattr(orchestrator, "triage", lambda findings: [{
+        "id": "finding_0", "category": "hardcoded_secret", "label": "AWS Access Key",
+        "file": "src/config/aws.ts", "severity": "critical",
+    }])
+
+    def fake_explain(finding, platform=None):
+        observed["finding"] = finding
+        observed["platform"] = platform
+        return {"what_it_means": "ok", "why_it_matters": "ok"}
+
+    monkeypatch.setattr(orchestrator, "explain", fake_explain)
+    monkeypatch.setattr(orchestrator, "generate_fix_prompt", lambda finding, platform: "fix")
+
+    result = orchestrator.enrich(raw_findings, "replit")
+
+    assert result[0]["fix_prompt"] == "fix"
+    assert observed["platform"] == "replit"
+    assert observed["finding"]["line"] == 4
+    assert observed["finding"]["snippet"] == "const key = '[secret redacted]';"
+    assert observed["finding"]["match_preview"] == "AKIA12...(masked)"
+    assert observed["finding"]["platform"] == "replit"

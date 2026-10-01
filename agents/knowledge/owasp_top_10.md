@@ -1,5 +1,8 @@
 # OWASP Core Vulnerability Categories & Standards
 
+Source: OWASP Top 10 (2021), https://owasp.org/Top10/.
+Last reviewed: 2026-10-01.
+
 ## A01:2021 — Broken Access Control
 Access control enforces policy such that users cannot act outside of their intended permissions. Failures typically lead to unauthorized information disclosure, modification, or destruction of all data or performing a business function outside the user's limits.
 - **Common Flaws**:

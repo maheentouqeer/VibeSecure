@@ -57,16 +57,17 @@ def get_curated_doc(category: str, platform: Optional[str] = None) -> str:
         if bolt_doc:
             docs.append(bolt_doc)
 
-    # Category-specific guidance
+    # Category-specific guidance. Keep prompts narrow: platform docs already
+    # cover the relevant general rule, so avoid appending the full OWASP file.
     if cat in ("missing_header", "exposed_file", "cors_misconfig"):
         headers_doc = _read_doc("security_headers.md")
         if headers_doc:
             docs.append(headers_doc)
 
-    # General OWASP standards
-    owasp_doc = _read_doc("owasp_top_10.md")
-    if owasp_doc:
-        docs.append(owasp_doc)
+    if cat in ("hardcoded_secret", "static_analysis") and not docs:
+        owasp_doc = _read_doc("owasp_top_10.md")
+        if owasp_doc:
+            docs.append(owasp_doc)
 
     if not docs:
         return "Refer to standard secure coding practices and official platform security documentation."
