@@ -371,6 +371,35 @@ def test_fixprompt_gemini_success_is_used_and_grounded():
     assert "STRICT EVIDENCE GROUNDING RULES" in call["contents"]
 
 
+@pytest.mark.parametrize("finding, response", [
+    (
+        {"category": "hardcoded_secret", "label": "AWS Key", "file": "src/config/aws.ts"},
+        "Add `AWS_ACCESS_KEY_ID=your-key` to your `.env` file and remove the key from src/config/aws.ts.",
+    ),
+    (
+        {"category": "hardcoded_secret", "label": "AWS Key", "file": "src/config/aws.ts"},
+        "Edit `src/config/aws.ts` and load the value from the server environment.",
+    ),
+    (
+        {
+            "category": "missing_access_control", "label": "RLS missing",
+            "file": "supabase/migrations/init.sql", "table": "documents",
+        },
+        "Run ALTER TABLE documents ENABLE ROW LEVEL SECURITY; then add a policy using auth.uid().",
+    ),
+])
+def test_fixprompt_accepts_realistic_grounded_remediation(finding, response):
+    mock_response = mock.MagicMock(text=response)
+    mock_client = mock.MagicMock()
+    mock_client.models.generate_content.return_value = mock_response
+    mock_genai = mock.MagicMock()
+    mock_genai.Client.return_value = mock_client
+
+    with mock.patch.dict(os.environ, {"GEMINI_API_KEY": "fake-key"}):
+        with mock.patch.dict("sys.modules", {"google": mock.MagicMock(genai=mock_genai), "google.genai": mock_genai}):
+            assert generate_fix_prompt(finding, platform="generic") == response
+
+
 # ---------------------------------------------------------------------------
 # Evidence Guard Unit Tests
 # ---------------------------------------------------------------------------
@@ -455,6 +484,14 @@ def test_validate_evidence_grounding_does_not_parse_freeform_code_quotes():
 def test_validate_evidence_grounding_allows_remediation_wording(text):
     finding = {"file": "src/config/aws.ts", "snippet": "const key = '[secret redacted]';"}
     is_valid, reason = validate_evidence_grounding(text, finding)
+    assert is_valid is True
+    assert reason is None
+
+
+@pytest.mark.parametrize("filename", ["next.config.js", "vite.config.js", "vite.config.ts", "vercel.json", "netlify.toml", "middleware.ts"])
+def test_validate_evidence_grounding_allows_deployment_config_files(filename):
+    finding = {"file": "https://example.com", "category": "missing_header"}
+    is_valid, reason = validate_evidence_grounding(f"Edit {filename} to add the header.", finding)
     assert is_valid is True
     assert reason is None
 

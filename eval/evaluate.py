@@ -7,6 +7,7 @@ Measures:
 """
 
 import re
+import os
 import tempfile
 from pathlib import Path
 from typing import Any
@@ -148,8 +149,15 @@ def compute_metrics(tp: int, fp: int, fn: int) -> dict[str, float]:
 
 def evaluate_agents_grounding(all_findings: list[dict]) -> dict[str, Any]:
     """Evaluates agent-layer anti-hallucination grounding and platform awareness."""
+    evaluation_mode = "live_gemini_requested" if os.environ.get("GEMINI_API_KEY") else "deterministic_fallback_only"
     if not all_findings:
-        return {"total_evaluated": 0, "grounding_pass_rate": 0.0, "platform_alignment_rate": 0.0}
+        return {
+            "total_evaluated": 0,
+            "grounding_pass_rate": 0.0,
+            "platform_alignment_rate": 0.0,
+            "evaluation_mode": evaluation_mode,
+            "publication_ready": False,
+        }
 
     triaged = triage(all_findings)
     total = len(triaged)
@@ -189,6 +197,8 @@ def evaluate_agents_grounding(all_findings: list[dict]) -> dict[str, Any]:
         "total_agent_runs": total,
         "grounding_pass_rate": round(grounded_count / total, 4) if total > 0 else 1.0,
         "platform_alignment_rate": round(platform_aligned_count / total, 4) if total > 0 else 1.0,
+        "evaluation_mode": evaluation_mode,
+        "publication_ready": False,
     }
 
 
@@ -242,7 +252,8 @@ if __name__ == "__main__":
     print(f"Overall Recall    : {overall_metrics['recall']:.2%}")
     print(f"Overall F1 Score  : {overall_metrics['f1_score']:.2%}")
 
-    print("\n=== Agent Grounding & Accuracy Metrics ===")
+    print("\n=== Agent Grounding Sanity Check (not publication-grade) ===")
     print(f"Total Evaluated Findings : {agent_metrics['total_agent_runs']}")
+    print(f"Evaluation Mode          : {agent_metrics['evaluation_mode']}")
     print(f"Evidence Grounding Pass  : {agent_metrics['grounding_pass_rate']:.2%}")
     print(f"Platform Alignment Rate  : {agent_metrics['platform_alignment_rate']:.2%}")

@@ -36,7 +36,7 @@ Everything below assumes this gets fixed first.
 
 ### C3 — Agents explain code they have never seen
 - **Problem:** The triage contract (`agents/triage_agent.py:5-7`) collapses findings to `id, category, label, file, severity`, discarding Semgrep's `line`/`message` (`scanner/code_scanner.py:51-53`) and the secrets scanner's `match_preview` (`scanner/secrets_scanner.py:66`). `explain()` and `generate_fix_prompt()` receive only a filename and a rule ID — they are guessing. The `Finding` DB model also has no `line` column, so the UI can't show `auth.ts:42` either.
-- **Change:** Carry `line`, `message`, and a masked ±3-line code snippet through triage into the agents and the DB. Show the snippet in the finding card.
+- **Change:** Carry the finding line, message, and a masked single-line excerpt through triage into the agents and the DB. The grounding guard validates file, line, and table references; it does not parse free-form code snippets.
 - **Impact:** Largest single quality jump available — explanations go from "a secret is hardcoded" to "on line 42 of `src/config/aws.ts` you assigned an AWS key to `const key`."
 - **Priority:** Critical
 

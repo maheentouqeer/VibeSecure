@@ -256,7 +256,11 @@ Return ONLY the raw JSON object, without markdown formatting or code blocks.
                         continue
 
                     # Validate the model response against the original, unmasked evidence.
-                    validation_finding = {**safe_finding, "_original_file": finding.get("file", "")}
+                    validation_finding = {
+                        **safe_finding,
+                        "_original_file": finding.get("file", ""),
+                        "_original_table": finding.get("table", ""),
+                    }
                     valid_what, reason_what = validate_evidence_grounding(what, validation_finding, effective_platform)
                     valid_why, reason_why = validate_evidence_grounding(why, validation_finding, effective_platform)
 

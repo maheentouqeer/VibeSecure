@@ -286,3 +286,15 @@ def test_secret_snippet_redacts_every_quoted_value_on_the_line(tmp_path):
     aws = next(f for f in scan_secrets(tmp_path) if f["label"] == "AWS Access Key")
     assert aws["snippet"] == "cfg = {'[secret redacted]': '[secret redacted]', '[secret redacted]': '[secret redacted]'}"
     assert "hunter2hunter2hunter2" not in aws["snippet"]
+
+
+def test_secret_snippet_redacts_backticks_and_unquoted_assignments(tmp_path):
+    _write(tmp_path, "server.py", "export A=AKIA1234567890ABCDEF B=hunter2hunter2hunter2\n")
+    aws = next(f for f in scan_secrets(tmp_path) if f["label"] == "AWS Access Key")
+    assert "AKIA1234567890ABCDEF" not in aws["snippet"]
+    assert "hunter2hunter2hunter2" not in aws["snippet"]
+
+    _write(tmp_path, "client.ts", "const c = `AKIA1234567890ABCDEF:hunter2hunter2hunter2`;\n")
+    client = next(f for f in scan_secrets(tmp_path) if f["file"] == "client.ts")
+    assert "AKIA1234567890ABCDEF" not in client["snippet"]
+    assert "hunter2hunter2hunter2" not in client["snippet"]

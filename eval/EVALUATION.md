@@ -45,12 +45,15 @@ python -m eval.evaluate
 
 ---
 
-## 4. Evaluation Summary Results
+## 4. Scope and Reporting
 
-| Metric | Benchmark Score |
-|---|---|
-| **Precision** | **100.00%** |
-| **Recall** | **100.00%** |
-| **F1 Score** | **100.00%** |
+The checked-in fixtures are a small deterministic smoke suite, not an
+independent benchmark. They are useful for regression detection, but their
+scores must not be quoted as production precision, recall, F1, or model
+grounding accuracy. The clean repository case also contains no expected
+findings, so it contributes no recall evidence.
 
-*Note: Results were verified across the synthetic benchmark suite covering secrets, Supabase RLS, and CORS configuration risks.*
+`python -m eval.evaluate` labels agent results as
+`deterministic_fallback_only` when `GEMINI_API_KEY` is absent. That run checks
+fallback-template contracts and platform routing only. A live Gemini result
+requires the opt-in integration test and an independently labeled corpus.

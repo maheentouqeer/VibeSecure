@@ -158,7 +158,11 @@ Return ONLY the prompt string to give to the vibe-coding tool. Do not wrap in ma
                         continue
 
                     # Validate the model response against the original, unmasked evidence.
-                    validation_finding = {**safe_finding, "_original_file": finding.get("file", "")}
+                    validation_finding = {
+                        **safe_finding,
+                        "_original_file": finding.get("file", ""),
+                        "_original_table": finding.get("table", ""),
+                    }
                     is_valid, reason = validate_evidence_grounding(text, validation_finding, platform)
                     if not is_valid:
                         logger.warning(
