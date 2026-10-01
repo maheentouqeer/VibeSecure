@@ -7,6 +7,7 @@ maintained rule set. Keep this as the guaranteed fallback.
 """
 import math
 import re
+import hashlib
 from pathlib import Path
 
 PATTERNS = {
@@ -54,8 +55,8 @@ def _masked_snippet(text: str, start: int, end: int) -> tuple[int, str]:
     """Return the finding line and a small source excerpt with the secret removed."""
     line_number = text.count("\n", 0, start) + 1
     lines = text.splitlines()
-    first = max(0, line_number - 2)
-    last = min(len(lines), line_number + 1)
+    first = line_number - 1
+    last = line_number
     excerpt = lines[first:last]
     offset = line_number - first - 1
     if 0 <= offset < len(excerpt):
@@ -116,6 +117,7 @@ def scan_secrets(repo_path: Path) -> list[dict]:
                     "match_preview": match.group(0)[:6] + "...(masked)",
                     "line": line,
                     "snippet": snippet,
+                    "_match_hash": hashlib.sha256(match.group(0).encode()).hexdigest(),
                     "raw_severity": "critical",
                 })
 
@@ -145,15 +147,17 @@ def scan_secrets(repo_path: Path) -> list[dict]:
                     "match_preview": candidate[:6] + "...(masked)",
                     "line": line,
                     "snippet": snippet,
+                    "_match_hash": hashlib.sha256(candidate.encode()).hexdigest(),
                     "raw_severity": "high",
                 })
 
     unique_findings = []
     seen = set()
     for finding in findings:
-        key = (finding.get("category"), finding.get("file"), finding.get("match_preview"))
+        key = (finding.get("category"), finding.get("file"), finding.get("_match_hash"))
         if key in seen:
             continue
         seen.add(key)
+        finding.pop("_match_hash", None)
         unique_findings.append(finding)
     return unique_findings

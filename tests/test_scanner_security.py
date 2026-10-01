@@ -251,3 +251,31 @@ def test_same_secret_match_is_reported_once(tmp_path):
     _write(tmp_path, "server.py", "KEY = 'AIzaSyA1B2C3D4E5F6G7H8I9J0K1L2M3N4O5P6'\n")
     findings = scan_secrets(tmp_path)
     assert len(findings) == 1
+
+
+def test_different_same_prefix_secrets_are_not_deduplicated(tmp_path):
+    _write(
+        tmp_path,
+        "server.py",
+        "A = 'AKIA1234567890ABCDEF'\n"
+        "B = 'AKIAZZZZZZZZZZZZZZZZ'\n"
+        "C = 'sharedA1b2C3d4E5f6G7h8I9j0K1'\n"
+        "D = 'sharedZ9y8X7w6V5u4T3s2R1q0P9'\n",
+    )
+    findings = scan_secrets(tmp_path)
+    assert len(findings) == 4
+    assert all("_match_hash" not in finding for finding in findings)
+
+
+def test_secret_snippet_contains_only_the_redacted_finding_line(tmp_path):
+    _write(
+        tmp_path,
+        "server.py",
+        "PASSWORD = 'hunter2hunter2hunter2'\n"
+        "KEY = 'AKIA1234567890ABCDEF'\n"
+        "OTHER = 'another-secret-value'\n",
+    )
+    aws = next(f for f in scan_secrets(tmp_path) if f["label"] == "AWS Access Key")
+    assert aws["snippet"] == "KEY = '[secret redacted]'"
+    assert "hunter2hunter2hunter2" not in aws["snippet"]
+    assert "another-secret-value" not in aws["snippet"]

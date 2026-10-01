@@ -445,6 +445,22 @@ def test_validate_evidence_grounding_rejects_invented_snippet():
     assert "snippet" in reason.lower()
 
 
+def test_validate_evidence_grounding_allows_remediation_code():
+    finding = {"file": "src/config.ts", "snippet": "const key = '[secret redacted]';"}
+    valid_text = "Move the key into `process.env.AWS_ACCESS_KEY_ID` and update the server configuration."
+    is_valid, reason = validate_evidence_grounding(valid_text, finding)
+    assert is_valid is True
+    assert reason is None
+
+
+def test_validate_evidence_grounding_rejects_invented_backticked_code():
+    finding = {"file": "src/config.ts", "snippet": "const key = '[secret redacted]';"}
+    invalid_text = "Replace the assignment `axios.get('/api/admin')` in src/config.ts."
+    is_valid, reason = validate_evidence_grounding(invalid_text, finding)
+    assert is_valid is False
+    assert "snippet" in reason.lower()
+
+
 def test_validate_evidence_grounding_allows_parenthetical_prose():
     finding = {"file": "src/services/api.ts", "label": "Unsafe API request"}
     is_valid, reason = validate_evidence_grounding(
