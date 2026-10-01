@@ -67,7 +67,12 @@ def _masked_snippet(text: str, start: int, end: int) -> tuple[int, str]:
             line_end = len(text)
         local_start = max(0, start - line_start)
         local_end = min(len(line), end - line_start)
-        excerpt[offset] = line[:local_start] + "[secret redacted]" + line[local_end:]
+        redacted_line = line[:local_start] + "[secret redacted]" + line[local_end:]
+        excerpt[offset] = re.sub(
+            r"(['\"])(?:(?!\1).)*\1",
+            lambda match: f"{match.group(1)}[secret redacted]{match.group(1)}",
+            redacted_line,
+        )
     return line_number, "\n".join(excerpt)
 
 

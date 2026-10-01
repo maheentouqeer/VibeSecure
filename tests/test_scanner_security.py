@@ -279,3 +279,10 @@ def test_secret_snippet_contains_only_the_redacted_finding_line(tmp_path):
     assert aws["snippet"] == "KEY = '[secret redacted]'"
     assert "hunter2hunter2hunter2" not in aws["snippet"]
     assert "another-secret-value" not in aws["snippet"]
+
+
+def test_secret_snippet_redacts_every_quoted_value_on_the_line(tmp_path):
+    _write(tmp_path, "server.py", "cfg = {'aws': 'AKIA1234567890ABCDEF', 'pw': 'hunter2hunter2hunter2'}\n")
+    aws = next(f for f in scan_secrets(tmp_path) if f["label"] == "AWS Access Key")
+    assert aws["snippet"] == "cfg = {'[secret redacted]': '[secret redacted]', '[secret redacted]': '[secret redacted]'}"
+    assert "hunter2hunter2hunter2" not in aws["snippet"]

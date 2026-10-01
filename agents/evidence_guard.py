@@ -39,12 +39,6 @@ _FILE_PATH_PATTERN = re.compile(
 
 # Regex to detect specific line number claims (e.g., "line 42", "on line 15", "at line 88")
 _LINE_NUMBER_PATTERN = re.compile(r"\bline\s+(\d+)\b", re.IGNORECASE)
-_BACKTICK_SNIPPET_PATTERN = re.compile(r"`([^`\n]+)`")
-_ALLOWED_REMEDIATION_SNIPPET = re.compile(
-    r"(?:process\.env|os\.environ|getenv\s*\(|auth\.uid\s*\(|"
-    r"\b(?:alter|create|select|insert|update|delete|export|npm|pip)\b|\$[A-Za-z_])",
-    re.IGNORECASE,
-)
 
 
 EVIDENCE_STRICT_DIRECTIVE = """
@@ -134,22 +128,8 @@ def validate_evidence_grounding(
             except (ValueError, TypeError):
                 pass
 
-    # 3. Quoted code/snippet validation. Quoted remediation terms such as
-    # auth.uid() are allowed, but a quoted finding snippet must come from evidence.
-    finding_snippet = str(
-        finding.get("snippet") or finding.get("code_snippet") or finding.get("evidence") or ""
-    ).strip()
-    if finding_snippet:
-        normalized_snippet = " ".join(finding_snippet.split()).lower()
-        for match in _BACKTICK_SNIPPET_PATTERN.finditer(output_text):
-            quoted = match.group(1)
-            normalized_quoted = " ".join(quoted.split()).lower()
-            if len(normalized_quoted) >= 12 and normalized_quoted not in normalized_snippet:
-                if _ALLOWED_REMEDIATION_SNIPPET.search(quoted):
-                    continue
-                return False, "Output referenced a quoted code snippet not present in finding evidence"
-
-    # 4. Database Table validation
+    # 3. Database Table validation. Free-form remediation syntax is not
+    # treated as evidence; file, line, and table references remain strict.
     finding_table = str(finding.get("table", "")).lower().strip()
     if finding_table and finding.get("category") == "missing_access_control":
         # Check if model hallucinated a different specific table name by inspecting table references
