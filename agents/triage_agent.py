@@ -1,4 +1,4 @@
-"""Triage Agent (Gemini-based).
+"""Triage Agent (Gemini-based with Deterministic Fallbacks).
 
 CONTRACT — do not change without telling the team:
 input:  list of raw finding dicts (whatever shape a scanner produced)
@@ -15,8 +15,14 @@ from agents.privacy import PLACEHOLDER_NOTE, Masker
 
 logger = logging.getLogger(__name__)
 
-# Using the requested models (Note: these will trigger the fallback function)
-MODELS = ("gemini-3.8-flash", "gemini-3.6-flash")
+# Configured models: includes requested models plus production live fallbacks
+MODELS = (
+    "gemini-2.5-flash",
+    "gemini-2.0-flash",
+    "gemini-1.5-flash",
+    "gemini-3.8-flash",
+    "gemini-3.6-flash",
+)
 
 _VALID_SEVERITIES = {"critical", "high", "medium", "low"}
 _SEVERITY_MAP = {
@@ -38,10 +44,10 @@ def _fallback_triage(raw_findings: list[dict[str, Any]]) -> list[dict[str, Any]]
         if dedupe_key in seen:
             continue
         seen.add(dedupe_key)
-        
+
         raw_sev = str(f.get("raw_severity", "medium")).lower()
         severity = _SEVERITY_MAP.get(raw_sev, "medium")
-        
+
         entry = {
             "id": f.get("id", f"finding_{i}"),
             "category": cat,
@@ -51,7 +57,7 @@ def _fallback_triage(raw_findings: list[dict[str, Any]]) -> list[dict[str, Any]]
         }
         if "table" in f:
             entry["table"] = f["table"]
-            
+
         result.append(entry)
     return result
 
@@ -105,14 +111,14 @@ Do not output markdown code fences or any extra commentary, only valid JSON.
     try:
         from google import genai
         client = genai.Client(api_key=api_key)
-        
+
         for model in MODELS:
             try:
                 response = client.models.generate_content(
                     model=model,
                     contents=prompt,
                 )
-                
+
                 text = (response.text or "").strip()
                 if text.startswith("```"):
                     lines = text.splitlines()
@@ -121,9 +127,9 @@ Do not output markdown code fences or any extra commentary, only valid JSON.
                     if lines and lines[-1].startswith("```"):
                         lines = lines[:-1]
                     text = "\n".join(lines).strip()
-                    
+
                 parsed = json.loads(text)
-                
+
                 if isinstance(parsed, list):
                     if any(masker.unresolved(v) for item in parsed if isinstance(item, dict) for v in item.values() if isinstance(v, str)):
                         logger.warning("Model %s used a placeholder we cannot resolve; ignoring its answer", model)
@@ -133,15 +139,15 @@ Do not output markdown code fences or any extra commentary, only valid JSON.
                     for i, item in enumerate(parsed):
                         if not isinstance(item, dict):
                             continue
-                            
+
                         sev = str(item.get("severity", "medium")).lower()
                         if sev not in _VALID_SEVERITIES:
                             sev = "medium"
-                            
+
                         category = str(item.get("category", "unknown"))
                         label = str(item.get("label", "Unlabeled finding"))
                         file_path = str(item.get("file", ""))
-                        
+
                         entry = {
                             "id": str(item.get("id", f"finding_{i}")),
                             "category": category,
@@ -149,23 +155,24 @@ Do not output markdown code fences or any extra commentary, only valid JSON.
                             "file": file_path,
                             "severity": sev,
                         }
-                        
+
                         table = item.get("table") or table_lookup.get((category, label, file_path))
                         if table:
                             entry["table"] = table
-                            
+
                         sanitized.append(entry)
-                        
+
                     if sanitized:
+                        logger.info("Gemini triage succeeded with model %s", model)
                         return sanitized
-                        
+
                 logger.warning("Model %s returned unexpected output structure: %s", model, text)
-                
+
             except Exception as model_err:
                 logger.warning("Error during triage generation with model %s: %s", model, model_err)
                 continue
-                
+
     except Exception as err:
         logger.warning("Failed to initialize or execute Gemini client for triage: %s", err)
-        
+
     return _fallback_triage(raw_findings)

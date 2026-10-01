@@ -312,3 +312,12 @@ To run the deterministic agent and API test suites:
   ```bash
   pytest
   ```
+
+To verify the configured Gemini credentials and live model path explicitly:
+
+```bash
+GEMINI_API_KEY=your_key RUN_GEMINI_INTEGRATION=1 pytest tests/test_gemini_integration.py -q
+```
+
+The test is skipped during ordinary runs. Successful model selection is also
+logged at INFO level for triage, explanation, and fix-prompt calls.
