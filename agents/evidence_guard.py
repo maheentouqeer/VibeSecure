@@ -32,6 +32,14 @@ _ALLOWED_PLATFORM_FILES = {
     "vercel.json",
     "netlify.toml",
     "middleware.ts",
+    "tsconfig.json",
+    "jsconfig.json",
+    "eslint.config.js",
+    "eslint.config.mjs",
+    "postcss.config.mjs",
+    "tailwind.config.js",
+    "tailwind.config.ts",
+    "next-env.d.ts",
 }
 
 # Regex to detect file-like references (e.g., path/to/file.ts, server.js, config/aws.ts, .env.local)
@@ -55,7 +63,15 @@ STRICT EVIDENCE GROUNDING RULES (ANTI-HALLUCINATION ENFORCEMENT):
 
 def extract_mentioned_files(text: str) -> set[str]:
     """Finds all file paths and filenames referenced in the text."""
-    matches = set(_FILE_PATH_PATTERN.findall(text))
+    matches = []
+    for match in _FILE_PATH_PATTERN.finditer(text):
+        if text[match.end():].lstrip().startswith("("):
+            continue
+        value = match.group(0)
+        value_lower = value.lower().strip("`'\"(),;: \t\n")
+        if "/" not in value_lower and value_lower not in _ALLOWED_PLATFORM_FILES:
+            continue
+        matches.append(value)
     # Filter out common non-file extensions/tokens if matched
     clean = set()
     for m in matches:
@@ -113,7 +129,7 @@ def validate_evidence_grounding(
             continue
 
         # Check if matches an allowed platform configuration file
-        if any(allowed in f or f_base == allowed for allowed in _ALLOWED_PLATFORM_FILES):
+        if f in _ALLOWED_PLATFORM_FILES or f_base in _ALLOWED_PLATFORM_FILES:
             continue
 
         # If it's a specific invented source file, reject

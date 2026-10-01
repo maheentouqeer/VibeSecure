@@ -298,3 +298,11 @@ def test_secret_snippet_redacts_backticks_and_unquoted_assignments(tmp_path):
     client = next(f for f in scan_secrets(tmp_path) if f["file"] == "client.ts")
     assert "AKIA1234567890ABCDEF" not in client["snippet"]
     assert "hunter2hunter2hunter2" not in client["snippet"]
+
+
+def test_secret_snippet_redacts_yaml_style_values_and_keeps_redaction_intact(tmp_path):
+    _write(tmp_path, "config.yml", "aws: AKIA1234567890ABCDEF password: hunter2hunter2hunter2\n")
+    aws = next(f for f in scan_secrets(tmp_path) if f["label"] == "AWS Access Key")
+    assert "AKIA1234567890ABCDEF" not in aws["snippet"]
+    assert "hunter2hunter2hunter2" not in aws["snippet"]
+    assert "[secret redacted] redacted]" not in aws["snippet"]

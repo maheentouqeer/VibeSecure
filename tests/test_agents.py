@@ -400,6 +400,39 @@ def test_fixprompt_accepts_realistic_grounded_remediation(finding, response):
             assert generate_fix_prompt(finding, platform="generic") == response
 
 
+@pytest.mark.parametrize("finding, platform, response", [
+    (
+        {"category": "missing_header", "label": "Missing CSP", "file": "server.js"},
+        "generic",
+        "Add the Content-Security-Policy header in `next.config.js` and deploy the change.",
+    ),
+    (
+        {"category": "cors_misconfig", "label": "Wildcard CORS", "file": "server.js"},
+        "bolt_v0",
+        "Restrict the wildcard origin in `vercel.json` to the production application origin.",
+    ),
+    (
+        {"category": "missing_access_control", "label": "RLS missing", "file": "schema.sql", "table": "profiles"},
+        "lovable_supabase",
+        "Run ALTER TABLE profiles ENABLE ROW LEVEL SECURITY; and add a policy using auth.uid().",
+    ),
+    (
+        {"category": "hardcoded_secret", "label": "AWS Key", "file": "src/config/aws.ts"},
+        "generic",
+        "Call await res.json() and read `process.env.AWS_ACCESS_KEY_ID` instead of the value in src/config/aws.ts.",
+    ),
+])
+def test_fixprompt_accepts_realistic_gemini_responses(finding, platform, response):
+    mock_client = mock.MagicMock()
+    mock_client.models.generate_content.return_value = mock.MagicMock(text=response)
+    mock_genai = mock.MagicMock()
+    mock_genai.Client.return_value = mock_client
+
+    with mock.patch.dict(os.environ, {"GEMINI_API_KEY": "fake-key"}):
+        with mock.patch.dict("sys.modules", {"google": mock.MagicMock(genai=mock_genai), "google.genai": mock_genai}):
+            assert generate_fix_prompt(finding, platform=platform) == response
+
+
 # ---------------------------------------------------------------------------
 # Evidence Guard Unit Tests
 # ---------------------------------------------------------------------------
@@ -409,7 +442,7 @@ def test_extract_mentioned_files():
     files = extract_mentioned_files(text)
     assert "src/lib/auth.ts" in files
     assert ".env.local" in files
-    assert "config.py" in files
+    assert "config.py" not in files
 
 
 def test_extract_mentioned_lines():
