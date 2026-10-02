@@ -39,3 +39,14 @@ def _run_jobs_synchronously(request, monkeypatch):
     if request.node.get_closest_marker("real_executor") is None:
         monkeypatch.setattr(_jobs, "submit", lambda job_id: _jobs.process(job_id))
     yield
+
+
+@pytest.fixture(autouse=True)
+def _reset_gemini_model_health(monkeypatch):
+    """A model marked dead/cooling in one test must not be skipped in the next."""
+    from agents import gemini_models
+
+    monkeypatch.delenv("GEMINI_MODELS", raising=False)
+    gemini_models.reset()
+    yield
+    gemini_models.reset()

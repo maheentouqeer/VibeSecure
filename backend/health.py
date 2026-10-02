@@ -7,7 +7,7 @@
                  Returns 503 (with the reason) when the instance should not
                  receive traffic. Reports counts only -- nothing sensitive.
 """
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timezone
 from functools import lru_cache
 from pathlib import Path
 

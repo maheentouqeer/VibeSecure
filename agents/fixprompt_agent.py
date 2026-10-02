@@ -10,6 +10,7 @@ import logging
 import os
 from typing import Any
 
+from agents import gemini_models
 from agents.privacy import PLACEHOLDER_NOTE, Masker
 from agents.curated_retrieval import get_curated_doc
 from agents.evidence_guard import (
@@ -19,14 +20,8 @@ from agents.evidence_guard import (
 
 logger = logging.getLogger(__name__)
 
-# Configured models: includes requested models plus production live fallbacks
-MODELS = (
-    "gemini-2.5-flash",
-    "gemini-2.0-flash",
-    "gemini-1.5-flash",
-    "gemini-3.8-flash",
-    "gemini-3.6-flash",
-)
+# Model order and health tracking live in agents/gemini_models.py (override with GEMINI_MODELS).
+MODELS = gemini_models.DEFAULT_MODELS
 
 _GENERIC_FIXES = {
     "hardcoded_secret": "Move the secret found in {file} out of the code and into an environment variable or your platform's secrets manager, then remove it from the source file.",
@@ -145,7 +140,7 @@ Return ONLY the prompt string to give to the vibe-coding tool. Do not wrap in ma
         from google import genai
 
         client = genai.Client(api_key=api_key)
-        for model in MODELS:
+        for model in gemini_models.usable_models():
             try:
                 response = client.models.generate_content(
                     model=model,
@@ -172,9 +167,11 @@ Return ONLY the prompt string to give to the vibe-coding tool. Do not wrap in ma
                         )
                         continue
 
+                    gemini_models.report_success(model)
                     logger.info("Gemini fix prompt succeeded with model %s", model)
                     return masker.restore(text)
             except Exception as model_err:
+                gemini_models.report_failure(model, model_err)
                 logger.warning("Error generating fix prompt with model %s: %s", model, model_err)
                 continue
     except Exception as err:

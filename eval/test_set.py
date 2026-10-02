@@ -5,7 +5,7 @@ for measuring security scanner precision, recall, and overall F1 accuracy, as we
 evaluating agent-layer platform-awareness and anti-hallucination grounding.
 """
 
-from typing import Any, TypedDict
+from typing import TypedDict
 
 
 class ExpectedFinding(TypedDict):

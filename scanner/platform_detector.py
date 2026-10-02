@@ -4,7 +4,6 @@ This is a heuristic fingerprint, not a certainty -- good enough to pick
 the right fix-prompt style (Supabase vs. plain Postgres vs. Replit env
 vars, etc). Extend the signatures dict as you learn more platform quirks.
 """
-import json
 from pathlib import Path
 
 SIGNATURES = {

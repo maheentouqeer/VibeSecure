@@ -26,5 +26,5 @@ sentry-sdk[fastapi]>=2.0
 # MCP server (mcp_server.py)
 mcp>=1.0
 
-# Sign-in (Clerk session-token verification)
+# Sign-in (Supabase Auth session-token verification)
 PyJWT[crypto]>=2.8

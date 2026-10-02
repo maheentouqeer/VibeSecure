@@ -108,6 +108,7 @@ Create a `.env` file from `.env.example`:
 Configure your environment variables in `.env`:
 ```env
 GEMINI_API_KEY=your_gemini_api_key_here
+# optional: override the model order, e.g. GEMINI_MODELS=gemini-3.8-flash,gemini-3.6-flash,gemini-2.5-flash
 DATABASE_URL=sqlite:///./secure_vibecode.db
 ALLOWED_ORIGINS=http://localhost:3000
 ```
@@ -147,6 +148,8 @@ By default, the frontend connects to `http://localhost:8000`. To customize this,
 ```env
 NEXT_PUBLIC_API_URL=http://localhost:8000
 ```
+
+(`frontend/.env.example` has the same line: `cp frontend/.env.example frontend/.env.local`.)
 
 #### Step C: Run the Next.js Development Server
 

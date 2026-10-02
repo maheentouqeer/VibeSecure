@@ -174,8 +174,13 @@ def test_an_environment_proxy_cannot_be_used_to_skip_the_checks(internal, monkey
     session = safe_session()
     assert session.trust_env is False
     # the request targets a public address (which we can't reach in a test), never the "proxy":
-    with pytest.raises(requests.RequestException):
+    # Whether this request succeeds depends on the machine's network (some CI/sandbox networks
+    # answer for any public address), so the outcome is irrelevant: the point is that the
+    # environment proxy was never used.
+    try:
         session.get("http://public.test/", timeout=0.3)
+    except requests.RequestException:
+        pass
     assert internal.hits == 0
 
 

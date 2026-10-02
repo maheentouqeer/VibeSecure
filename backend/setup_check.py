@@ -13,7 +13,6 @@ Statuses: OK (looks right), WARN (works but worth fixing), FAIL (will not work),
 SKIP (feature not configured, which is fine if you don't want it).
 """
 import argparse
-import ipaddress
 import json
 import os
 import re

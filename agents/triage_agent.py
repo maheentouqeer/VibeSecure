@@ -11,18 +11,13 @@ import logging
 import os
 from typing import Any
 
+from agents import gemini_models
 from agents.privacy import PLACEHOLDER_NOTE, Masker
 
 logger = logging.getLogger(__name__)
 
-# Configured models: includes requested models plus production live fallbacks
-MODELS = (
-    "gemini-2.5-flash",
-    "gemini-2.0-flash",
-    "gemini-1.5-flash",
-    "gemini-3.8-flash",
-    "gemini-3.6-flash",
-)
+# Model order and health tracking live in agents/gemini_models.py (override with GEMINI_MODELS).
+MODELS = gemini_models.DEFAULT_MODELS
 
 _VALID_SEVERITIES = {"critical", "high", "medium", "low"}
 _SEVERITY_MAP = {
@@ -112,7 +107,7 @@ Do not output markdown code fences or any extra commentary, only valid JSON.
         from google import genai
         client = genai.Client(api_key=api_key)
 
-        for model in MODELS:
+        for model in gemini_models.usable_models():
             try:
                 response = client.models.generate_content(
                     model=model,
@@ -163,12 +158,14 @@ Do not output markdown code fences or any extra commentary, only valid JSON.
                         sanitized.append(entry)
 
                     if sanitized:
+                        gemini_models.report_success(model)
                         logger.info("Gemini triage succeeded with model %s", model)
                         return sanitized
 
                 logger.warning("Model %s returned unexpected output structure: %s", model, text)
 
             except Exception as model_err:
+                gemini_models.report_failure(model, model_err)
                 logger.warning("Error during triage generation with model %s: %s", model, model_err)
                 continue
 

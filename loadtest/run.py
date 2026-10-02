@@ -21,7 +21,6 @@ scanner, spends real money. See loadtest/README.md.
 import argparse
 import asyncio
 import json
-import statistics
 import sys
 import time
 from collections import Counter

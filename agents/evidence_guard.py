@@ -9,7 +9,7 @@ Direct fix for LLM-invented specifics without requiring internet access.
 
 import logging
 import re
-from typing import Any, Callable, Optional
+from typing import Any, Optional
 
 logger = logging.getLogger(__name__)
 
@@ -109,7 +109,6 @@ def validate_evidence_grounding(
     evidence_files = [finding.get("file", ""), finding.get("_original_file", "")]
     normalized_files = [str(value).lower().strip(" <>`'\"") for value in evidence_files if value]
     finding_file = normalized_files[0] if normalized_files else ""
-    finding_file_base = finding_file.split("/")[-1] if finding_file else ""
     evidence_bases = {value.split("/")[-1] for value in normalized_files}
 
     # 1. File path validation

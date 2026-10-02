@@ -16,18 +16,13 @@ from agents.evidence_guard import (
     validate_evidence_grounding,
 )
 
+from agents import gemini_models
 from agents.privacy import PLACEHOLDER_NOTE, Masker
 
 logger = logging.getLogger(__name__)
 
-# Configured models: includes requested models plus production live fallbacks (gemini-2.5-flash, gemini-2.0-flash)
-MODELS = (
-    "gemini-2.5-flash",
-    "gemini-2.0-flash",
-    "gemini-1.5-flash",
-    "gemini-3.8-flash",
-    "gemini-3.6-flash",
-)
+# Model order and health tracking live in agents/gemini_models.py (override with GEMINI_MODELS).
+MODELS = gemini_models.DEFAULT_MODELS
 
 # Generic fallback templates
 _GENERIC_TEMPLATES = {
@@ -203,7 +198,7 @@ Analyze the following security finding and explain it clearly in plain English.
 {PLACEHOLDER_NOTE}
 
 Finding details:
-{json.dumps(masker.mask_finding(finding), indent=2)}
+{json.dumps(safe_finding, indent=2)}
 
 OFFICIAL VETTED SECURITY KNOWLEDGE:
 {curated_context}
@@ -224,7 +219,7 @@ Return ONLY the raw JSON object, without markdown formatting or code blocks.
         from google.genai import types
 
         client = genai.Client(api_key=api_key)
-        for model in MODELS:
+        for model in gemini_models.usable_models():
             try:
                 config = types.GenerateContentConfig(
                     response_mime_type="application/json",
@@ -273,6 +268,7 @@ Return ONLY the raw JSON object, without markdown formatting or code blocks.
                         )
                         continue
 
+                    gemini_models.report_success(model)
                     logger.info("Gemini explanation succeeded with model %s", model)
                     return {
                         "what_it_means": masker.restore(what),
@@ -280,6 +276,7 @@ Return ONLY the raw JSON object, without markdown formatting or code blocks.
                     }
                 logger.warning("Model %s returned JSON missing expected keys: %s", model, text)
             except Exception as model_err:
+                gemini_models.report_failure(model, model_err)
                 logger.warning("Error explaining finding with model %s: %s", model, model_err)
                 continue
     except Exception as err:
