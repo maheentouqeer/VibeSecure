@@ -79,8 +79,9 @@ export default function McpPage() {
             </p>
             <div className="relative mt-4">
               <pre className="glass-code overflow-x-auto rounded-2xl p-4 text-xs leading-6 text-slate-300">{localConfig}</pre>
-              <button onClick={() => copy(localConfig, 'local')} className="glass-button absolute right-3 top-3 rounded-lg p-2" aria-label="Copy local MCP config">
+              <button onClick={() => copy(localConfig, 'local')} className="glass-button absolute right-3 top-3 inline-flex items-center gap-1.5 rounded-lg px-2.5 py-2 text-xs font-semibold" aria-label="Copy local MCP config">
                 <Copy className="h-4 w-4" />
+                {copied === 'local' ? 'Copied' : 'Copy'}
               </button>
             </div>
           </section>
@@ -100,8 +101,9 @@ export default function McpPage() {
             </div>
             <div className="relative mt-4">
               <pre className="glass-code overflow-x-auto rounded-2xl p-4 text-xs leading-6 text-slate-300">{remoteConfig}</pre>
-              <button onClick={() => copy(remoteConfig, 'remote')} className="glass-button absolute right-3 top-3 rounded-lg p-2" aria-label="Copy hosted MCP config">
+              <button onClick={() => copy(remoteConfig, 'remote')} className="glass-button absolute right-3 top-3 inline-flex items-center gap-1.5 rounded-lg px-2.5 py-2 text-xs font-semibold" aria-label="Copy hosted MCP config">
                 <Copy className="h-4 w-4" />
+                {copied === 'remote' ? 'Copied' : 'Copy'}
               </button>
             </div>
             <Link href="/settings" className="mt-4 inline-flex items-center gap-1.5 text-sm font-semibold text-emerald-500 hover:text-emerald-400">

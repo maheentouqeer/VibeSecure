@@ -30,19 +30,33 @@ function ApiKeysPanel() {
   const [error, setError] = useState<string | null>(null);
 
   async function loadKeys() {
-    setLoading(true);
     setError(null);
     try {
       setKeys(await listApiKeys());
     } catch (err) {
       setError(err instanceof ApiError ? err.message : 'Could not load API keys.');
-    } finally {
-      setLoading(false);
     }
   }
 
   useEffect(() => {
-    loadKeys();
+    let cancelled = false;
+
+    void (async () => {
+      try {
+        const data = await listApiKeys();
+        if (!cancelled) setKeys(data);
+      } catch (err) {
+        if (!cancelled) {
+          setError(err instanceof ApiError ? err.message : 'Could not load API keys.');
+        }
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   async function handleCreate() {
