@@ -99,6 +99,12 @@ def clone_repo(github_url: str, token: str | None = None) -> Path:
 
     try:
         clone_env = os.environ.copy()
+        # Never inherit a credential helper from the server's own environment (an editor such as
+        # VS Code sets GIT_ASKPASS globally). Only the helper created below may supply credentials,
+        # and only for GitHub; and a server must never wait on an interactive prompt.
+        for inherited in ("GIT_ASKPASS", "SSH_ASKPASS", "VIBESECURE_GIT_ASKPASS_SECRET"):
+            clone_env.pop(inherited, None)
+        clone_env["GIT_TERMINAL_PROMPT"] = "0"
         token = (token or server_token_for(github_url)) if _is_github_url(github_url) else None
 
         if token:

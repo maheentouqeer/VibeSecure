@@ -152,3 +152,26 @@ def test_cloning_never_offers_the_ignored_server_token_but_still_offers_a_users_
 
     repo_utils.cleanup(repo_utils.clone_repo("https://github.com/o/private", token="users-own"))
     assert seen["env"]["VIBESECURE_GIT_ASKPASS_SECRET"] == "users-own"  # a user's connection is unaffected
+
+
+def test_credential_helpers_inherited_from_the_server_environment_are_never_passed_on(monkeypatch):
+    """A developer's editor sets GIT_ASKPASS globally; a clone must not inherit it."""
+    monkeypatch.setenv("GIT_ASKPASS", "/usr/bin/editor-askpass")
+    monkeypatch.setenv("SSH_ASKPASS", "/usr/bin/ssh-askpass")
+    monkeypatch.setenv("VIBESECURE_GIT_ASKPASS_SECRET", "stale")
+    monkeypatch.delenv("GITHUB_TOKEN", raising=False)
+    seen = _capture_clone_env(monkeypatch)
+    repo_utils.cleanup(repo_utils.clone_repo("https://evil.example/github.com/x.git"))
+
+    for name in ("GIT_ASKPASS", "SSH_ASKPASS", "VIBESECURE_GIT_ASKPASS_SECRET"):
+        assert name not in seen["env"]
+    assert seen["env"]["GIT_TERMINAL_PROMPT"] == "0"
+
+
+def test_only_our_own_helper_supplies_github_credentials(monkeypatch):
+    monkeypatch.setenv("GIT_ASKPASS", "/usr/bin/editor-askpass")
+    seen = _capture_clone_env(monkeypatch)
+    repo_utils.cleanup(repo_utils.clone_repo("https://github.com/octocat/Hello-World.git", token="users-own"))
+
+    assert seen["env"]["GIT_ASKPASS"] != "/usr/bin/editor-askpass"
+    assert seen["env"]["VIBESECURE_GIT_ASKPASS_SECRET"] == "users-own"

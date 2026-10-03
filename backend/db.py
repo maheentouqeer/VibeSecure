@@ -42,7 +42,9 @@ _use_null_pool = _is_supabase and ":6543" in DATABASE_URL
 
 # SQLite needs this connect_arg for use with FastAPI's threaded TestClient;
 # Postgres ignores it entirely so it's safe to always pass.
-connect_args = {"check_same_thread": False} if DATABASE_URL.startswith("sqlite") else {}
+# timeout: seconds a writer waits for the file lock (Python's default is 5, which "database is
+# locked" errors out under concurrent writes; see tests/test_load_smoke.py).
+connect_args = {"check_same_thread": False, "timeout": 30} if DATABASE_URL.startswith("sqlite") else {}
 
 def _int_env(name: str, default: int) -> int:
     try:
@@ -70,6 +72,18 @@ elif ":memory:" not in DATABASE_URL:
     }
 
 engine = create_engine(DATABASE_URL, connect_args=connect_args, **_pool_kwargs)
+if DATABASE_URL.startswith("sqlite") and ":memory:" not in DATABASE_URL:
+    from sqlalchemy import event
+
+    @event.listens_for(engine, "connect")
+    def _sqlite_pragmas(dbapi_connection, _record):
+        # WAL lets readers run while one writer writes; NORMAL sync is safe with WAL.
+        cursor = dbapi_connection.cursor()
+        cursor.execute("PRAGMA journal_mode=WAL")
+        cursor.execute("PRAGMA synchronous=NORMAL")
+        cursor.execute("PRAGMA busy_timeout=30000")
+        cursor.close()
+
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
 
