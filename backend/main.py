@@ -72,7 +72,22 @@ async def lifespan(_app: FastAPI):
         jobs.recover_stale(session)
     _fail_orphaned_jobs()
 
-    async with mcp_remote.mcp.session_manager.run():
+    remote_mcp_enabled = os.getenv("VIBESECURE_ENABLE_REMOTE_MCP", "1") == "1"
+
+    if remote_mcp_enabled:
+        async with mcp_remote.mcp.session_manager.run():
+            stop = threading.Event()
+            worker = threading.Thread(
+                target=jobs.maintenance_loop, args=(stop, jobs.inline()), name="job-maintenance", daemon=True
+            )
+            worker.start()
+            try:
+                yield
+            finally:
+                stop.set()
+                worker.join(timeout=5)
+                jobs.shutdown()
+    else:
         stop = threading.Event()
         worker = threading.Thread(
             target=jobs.maintenance_loop, args=(stop, jobs.inline()), name="job-maintenance", daemon=True

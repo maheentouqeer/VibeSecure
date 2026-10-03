@@ -4,6 +4,7 @@ matter which test file is collected first."""
 import os
 import sys
 
+os.environ["VIBESECURE_ENABLE_REMOTE_MCP"] = "0"
 os.environ["DATABASE_URL"] = os.environ.get("TEST_DATABASE_URL", "sqlite:///./test_secure_vibecode.db")
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 

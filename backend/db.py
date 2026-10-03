@@ -131,7 +131,6 @@ class ApiKey(Base):
 
     __tablename__ = "api_keys"
     __table_args__ = (
-        UniqueConstraint("key_hash", name="uq_api_keys_key_hash"),
         Index("ix_api_keys_user_id", "user_id"),
     )
 
