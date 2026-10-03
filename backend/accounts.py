@@ -56,7 +56,7 @@ def list_api_keys(user: db.User = Depends(require_user), session: Session = Depe
         .all()
     )
 
-@router.post("/me/api-keys", status_code=201)
+@router.post("/me/api-keys", status_code=201, dependencies=[_mutation_limit])
 def create_api_key(
     payload: ApiKeyCreate,
     user: db.User = Depends(require_user),
@@ -72,7 +72,7 @@ def create_api_key(
         "warning": "Store this key now. VibeSecure will not show the full key again.",
     }
 
-@router.delete("/me/api-keys/{key_id}", status_code=204)
+@router.delete("/me/api-keys/{key_id}", status_code=204, dependencies=[_mutation_limit])
 def revoke_api_key(
     key_id: str,
     user: db.User = Depends(require_user),

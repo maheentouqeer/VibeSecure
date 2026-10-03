@@ -13,7 +13,7 @@ from starlette.types import ASGIApp, Receive, Scope, Send
 from backend import api_keys, db, jobs, plans
 from backend.auth import Actor
 
-mcp = FastMCP("VibeSecure Remote", json_response=True, stateless_http=True)
+mcp = FastMCP("VibeSecure Remote", json_response=True, stateless_http=True, streamable_http_path="/")
 
 def _enqueue(user_id: str, target: str, kind: str) -> str:
     with db.SessionLocal() as session:
@@ -183,6 +183,4 @@ async def rescan(scan_id: str, wait_for_completion: bool = True) -> dict:
         return {**status, 'message': 'Still running; call get_scan_status then get_findings.'}
     return await anyio.to_thread.run_sync(_status, context.user_id, scan_id)
 
-http_app = APIKeyMiddleware(
-    mcp.streamable_http_app(streamable_http_path='/', json_response=True, stateless_http=True)
-)
+http_app = APIKeyMiddleware(mcp.streamable_http_app())
