@@ -62,11 +62,10 @@ export default function SettingsPage() {
               <button
                 key={tabItem.id}
                 onClick={() => setActiveTab(tabItem.id as 'profile' | 'apikeys' | 'preferences')}
-                className={`flex items-center gap-2 px-4 py-2.5 text-sm font-medium rounded-t-lg transition-colors border-b-2 whitespace-nowrap ${
-                  activeTab === tabItem.id
+                className={`flex items-center gap-2 px-4 py-2.5 text-sm font-medium rounded-t-lg transition-colors border-b-2 whitespace-nowrap ${activeTab === tabItem.id
                     ? 'border-emerald-500 text-emerald-600 dark:text-emerald-400 bg-slate-50 dark:bg-slate-900/50'
                     : 'border-transparent text-slate-500 hover:text-slate-900 dark:hover:text-slate-200'
-                }`}
+                  }`}
               >
                 <TabIcon className="h-4 w-4" />
                 {tabItem.label}
@@ -156,31 +155,28 @@ export default function SettingsPage() {
               <div className="grid grid-cols-3 gap-3">
                 <button
                   onClick={() => setTheme('light')}
-                  className={`p-3 rounded-lg border flex flex-col items-center gap-2 text-sm font-medium transition-all ${
-                    theme === 'light'
+                  className={`p-3 rounded-lg border flex flex-col items-center gap-2 text-sm font-medium transition-all ${theme === 'light'
                       ? 'border-emerald-500 bg-emerald-50 dark:bg-emerald-950/20 text-emerald-600'
                       : 'border-slate-200 dark:border-slate-800 hover:bg-slate-100 dark:hover:bg-slate-800'
-                  }`}
+                    }`}
                 >
                   <Sun className="h-5 w-5" /> Light
                 </button>
                 <button
                   onClick={() => setTheme('dark')}
-                  className={`p-3 rounded-lg border flex flex-col items-center gap-2 text-sm font-medium transition-all ${
-                    theme === 'dark'
+                  className={`p-3 rounded-lg border flex flex-col items-center gap-2 text-sm font-medium transition-all ${theme === 'dark'
                       ? 'border-emerald-500 bg-emerald-50 dark:bg-emerald-950/20 text-emerald-400'
                       : 'border-slate-200 dark:border-slate-800 hover:bg-slate-100 dark:hover:bg-slate-800'
-                  }`}
+                    }`}
                 >
                   <Moon className="h-5 w-5" /> Dark
                 </button>
                 <button
                   onClick={() => setTheme('system')}
-                  className={`p-3 rounded-lg border flex flex-col items-center gap-2 text-sm font-medium transition-all ${
-                    theme === 'system'
+                  className={`p-3 rounded-lg border flex flex-col items-center gap-2 text-sm font-medium transition-all ${theme === 'system'
                       ? 'border-emerald-500 bg-emerald-50 dark:bg-emerald-950/20 text-emerald-500'
                       : 'border-slate-200 dark:border-slate-800 hover:bg-slate-100 dark:hover:bg-slate-800'
-                  }`}
+                    }`}
                 >
                   <Monitor className="h-5 w-5" /> System
                 </button>
