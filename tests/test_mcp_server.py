@@ -40,12 +40,16 @@ def project(tmp_path):
     return tmp_path
 
 
-def test_server_exposes_the_three_tools():
+def test_server_exposes_the_mcp_tools():
     async def go():
         async with create_connected_server_and_client_session(mcp_server.mcp._mcp_server) as client:
             return sorted(t.name for t in (await client.list_tools()).tools)
 
-    assert asyncio.run(go()) == ["scan_url", "scan_workspace", "verify_fixes"]
+    assert asyncio.run(go()) == [
+        "get_findings", "get_scan_status", "rescan",
+        "scan_live_url", "scan_local_workspace", "scan_repository",
+        "scan_url", "scan_workspace", "verify_fixes",
+    ]
 
 
 def test_scan_workspace_finds_secret_and_returns_actionable_fields(project):

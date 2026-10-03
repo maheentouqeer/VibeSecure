@@ -41,7 +41,7 @@ export default function Navbar() {
             <CreditCard className="h-5 w-5" />
             <span>Billing</span>
           </Link>
-        </nav><div className="glass-badge hidden lg:flex items-center gap-2 rounded-2xl px-3 py-2.5 text-xs text-emerald-700 dark:text-emerald-300"><Terminal className="h-4 w-4 shrink-0" /><span><strong className="block font-semibold">MCP available</strong><span className="text-[11px] text-slate-500 dark:text-slate-400">Scan from your AI editor</span></span></div></div>
+        </nav><Link href="/mcp" className="glass-badge hidden lg:flex items-center gap-2 rounded-2xl px-3 py-2.5 text-xs text-emerald-700 transition hover:border-emerald-400/40 dark:text-emerald-300" title="Open VibeSecure MCP setup"><Terminal className="h-4 w-4 shrink-0" /><span><strong className="block font-semibold">MCP available</strong><span className="text-[11px] text-slate-500 dark:text-slate-400">Open setup & connect</span></span></Link></div>
       </div>
 
       {/* Auth Actions (Bottom Panel) */}

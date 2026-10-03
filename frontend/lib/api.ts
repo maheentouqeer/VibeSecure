@@ -171,3 +171,33 @@ export async function claimScans(signal?: AbortSignal): Promise<{ claimed: numbe
 export async function createCheckout(plan: "pro" = "pro", signal?: AbortSignal): Promise<{ url: string }> {
   return apiFetch<{ url: string }>("/billing/checkout", { method: "POST", body: JSON.stringify({ plan }) }, signal);
 }
+
+
+export interface ApiKeyMeta {
+  id: string;
+  label: string;
+  key_prefix: string;
+  created_at: string;
+  last_used_at: string | null;
+  revoked_at: string | null;
+}
+
+export interface ApiKeyCreated extends ApiKeyMeta {
+  key: string;
+  warning: string;
+}
+
+export async function listApiKeys(signal?: AbortSignal): Promise<ApiKeyMeta[]> {
+  return apiFetch<ApiKeyMeta[]>("/me/api-keys", {}, signal);
+}
+
+export async function createApiKey(label: string, signal?: AbortSignal): Promise<ApiKeyCreated> {
+  return apiFetch<ApiKeyCreated>("/me/api-keys", {
+    method: "POST",
+    body: JSON.stringify({ label }),
+  }, signal);
+}
+
+export async function revokeApiKey(keyId: string, signal?: AbortSignal): Promise<void> {
+  await apiFetch<void>("/me/api-keys/" + keyId, { method: "DELETE" }, signal);
+}
