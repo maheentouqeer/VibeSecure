@@ -3,6 +3,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useTheme } from "next-themes";
 import {
   Shield,
@@ -17,17 +18,13 @@ import {
   CheckCircle2,
   Circle,
 } from "lucide-react";
+import { supabase } from "@/lib/supabase";
+import { claimScans } from "@/lib/api";
 
-// ---------------------------------------------------------------------------
-// Tiny local class-merge helper (no external cn() dependency)
-// ---------------------------------------------------------------------------
 function cx(...classes: Array<string | false | null | undefined>) {
   return classes.filter(Boolean).join(" ");
 }
 
-// ---------------------------------------------------------------------------
-// GitHub icon (inline SVG so there's no extra icon-pack dependency)
-// ---------------------------------------------------------------------------
 function GitHubIcon(props: React.SVGProps<SVGSVGElement>) {
   return (
     <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true" {...props}>
@@ -36,9 +33,6 @@ function GitHubIcon(props: React.SVGProps<SVGSVGElement>) {
   );
 }
 
-// ---------------------------------------------------------------------------
-// Theme toggle
-// ---------------------------------------------------------------------------
 function ThemeToggle() {
   const { resolvedTheme, setTheme } = useTheme();
   const [mounted, setMounted] = useState(false);
@@ -60,9 +54,6 @@ function ThemeToggle() {
   );
 }
 
-// ---------------------------------------------------------------------------
-// Password input with show/hide toggle
-// ---------------------------------------------------------------------------
 function PasswordInput({
   id,
   value,
@@ -118,9 +109,6 @@ function PasswordInput({
   );
 }
 
-// ---------------------------------------------------------------------------
-// GitHub OAuth button
-// ---------------------------------------------------------------------------
 function GitHubButton({ isLoading, onClick }: { isLoading: boolean; onClick: () => void }) {
   return (
     <button
@@ -140,9 +128,6 @@ function GitHubButton({ isLoading, onClick }: { isLoading: boolean; onClick: () 
   );
 }
 
-// ---------------------------------------------------------------------------
-// Brand panel live-check preview (desktop only, decorative)
-// ---------------------------------------------------------------------------
 const PREVIEW_CHECKS = [
   { label: "Scanning for exposed secrets", delay: 0 },
   { label: "Checking row-level security policies", delay: 1400 },
@@ -194,14 +179,12 @@ function LiveCheckPreview() {
   );
 }
 
-// ---------------------------------------------------------------------------
-// Page
-// ---------------------------------------------------------------------------
 function isValidEmail(value: string) {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value);
 }
 
 export default function LoginPage() {
+  const router = useRouter();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [rememberMe, setRememberMe] = useState(true);
@@ -219,33 +202,48 @@ export default function LoginPage() {
     return Object.keys(errors).length === 0;
   }
 
-  function handleSubmit(e: React.FormEvent) {
+  async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setFormError(null);
     if (!validate()) return;
 
     setIsLoading(true);
 
-    // TODO: Wire to Supabase Auth client when Aneel's backend lands
-    // const { error } = await supabase.auth.signInWithPassword({ email, password });
-    // if (error) { setFormError("Incorrect email or password."); setIsLoading(false); return; }
-    setTimeout(() => {
+    const { error } = await supabase.auth.signInWithPassword({ email, password });
+    if (error) {
+      setFormError(error.message);
       setIsLoading(false);
-      // Simulate success — real flow would redirect into the app.
-    }, 1500);
+      return;
+    }
+
+    try {
+      await claimScans();
+    } catch {
+      // Ignore claim errors if backend is in anonymous-only mode
+    }
+
+    setIsLoading(false);
+    router.push("/");
   }
 
-  function handleGitHubLogin() {
+  async function handleGitHubLogin() {
     setIsGitHubLoading(true);
-    // TODO: Wire to Supabase Auth client when Aneel's backend lands
-    // await supabase.auth.signInWithOAuth({ provider: "github" });
-    setTimeout(() => setIsGitHubLoading(false), 1500);
+    setFormError(null);
+    const { error } = await supabase.auth.signInWithOAuth({
+      provider: "github",
+      options: {
+        redirectTo: `${window.location.origin}/`,
+      },
+    });
+    if (error) {
+      setFormError(error.message);
+      setIsGitHubLoading(false);
+    }
   }
 
   return (
     <div className="min-h-screen bg-white dark:bg-slate-950">
       <div className="grid min-h-screen lg:grid-cols-2">
-        {/* Form column */}
         <div className="relative flex flex-col px-6 py-8 sm:px-12 sm:py-10">
           <div className="flex items-center justify-between">
             <Link href="/" className="flex items-center gap-2">
@@ -379,7 +377,6 @@ export default function LoginPage() {
           </div>
         </div>
 
-        {/* Brand panel (desktop only) */}
         <div className="relative hidden overflow-hidden bg-slate-950 lg:flex lg:flex-col lg:justify-between lg:p-12">
           <div
             className="absolute inset-0 opacity-40"

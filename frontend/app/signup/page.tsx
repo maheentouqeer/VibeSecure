@@ -3,6 +3,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useTheme } from "next-themes";
 import {
   Shield,
@@ -17,6 +18,8 @@ import {
   CheckCircle2,
   Circle,
 } from "lucide-react";
+import { supabase } from "@/lib/supabase";
+import { claimScans } from "@/lib/api";
 
 function cx(...classes: Array<string | false | null | undefined>) {
   return classes.filter(Boolean).join(" ");
@@ -106,7 +109,6 @@ function PasswordInput({
   );
 }
 
-// -- Password strength (Weak / Fair / Strong) ------------------------------
 type Strength = "empty" | "weak" | "fair" | "strong";
 
 function getPasswordStrength(password: string): Strength {
@@ -223,6 +225,7 @@ function isValidEmail(value: string) {
 }
 
 export default function SignUpPage() {
+  const router = useRouter();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [agreedToTerms, setAgreedToTerms] = useState(false);
@@ -230,6 +233,7 @@ export default function SignUpPage() {
   const [isLoading, setIsLoading] = useState(false);
   const [isGitHubLoading, setIsGitHubLoading] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
+  const [formSuccess, setFormSuccess] = useState<string | null>(null);
 
   function validate() {
     const errors: { email?: string; password?: string; terms?: string } = {};
@@ -242,27 +246,47 @@ export default function SignUpPage() {
     return Object.keys(errors).length === 0;
   }
 
-  function handleSubmit(e: React.FormEvent) {
+  async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setFormError(null);
+    setFormSuccess(null);
     if (!validate()) return;
 
     setIsLoading(true);
 
-    // TODO: Wire to Supabase Auth client when Aneel's backend lands
-    // const { error } = await supabase.auth.signUp({ email, password });
-    // if (error) { setFormError(error.message); setIsLoading(false); return; }
-    setTimeout(() => {
+    const { data, error } = await supabase.auth.signUp({ email, password });
+    if (error) {
+      setFormError(error.message);
       setIsLoading(false);
-      // Simulate success — real flow would redirect to "confirm your email" or straight into the app.
-    }, 1500);
+      return;
+    }
+
+    if (data.session) {
+      try {
+        await claimScans();
+      } catch {
+        // Ignore claim errors
+      }
+      router.push("/");
+    } else {
+      setIsLoading(false);
+      setFormSuccess("Sign up successful! Please check your email to confirm your account.");
+    }
   }
 
-  function handleGitHubSignUp() {
+  async function handleGitHubSignUp() {
     setIsGitHubLoading(true);
-    // TODO: Wire to Supabase Auth client when Aneel's backend lands
-    // await supabase.auth.signInWithOAuth({ provider: "github" });
-    setTimeout(() => setIsGitHubLoading(false), 1500);
+    setFormError(null);
+    const { error } = await supabase.auth.signInWithOAuth({
+      provider: "github",
+      options: {
+        redirectTo: `${window.location.origin}/`,
+      },
+    });
+    if (error) {
+      setFormError(error.message);
+      setIsGitHubLoading(false);
+    }
   }
 
   return (
@@ -298,6 +322,16 @@ export default function SignUpPage() {
                   >
                     <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
                     <span>{formError}</span>
+                  </div>
+                )}
+
+                {formSuccess && (
+                  <div
+                    role="status"
+                    className="flex items-start gap-2 rounded-lg border border-emerald-300 bg-emerald-50 px-3.5 py-3 text-sm text-emerald-700 dark:border-emerald-500/30 dark:bg-emerald-500/10 dark:text-emerald-300"
+                  >
+                    <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-emerald-500" />
+                    <span>{formSuccess}</span>
                   </div>
                 )}
 

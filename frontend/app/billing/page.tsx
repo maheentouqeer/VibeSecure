@@ -1,40 +1,107 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useEffect, useState, useCallback } from 'react';
 import Link from 'next/link';
-import { 
-  Check, 
-  Download, 
-  ShieldCheck, 
-  ArrowUpRight, 
-  BarChart3, 
-  Users, 
-  Key, 
-  ExternalLink,
+import {
+  Check,
+  ShieldCheck,
+  ArrowUpRight,
+  BarChart3,
+  Loader2,
+  AlertCircle,
   Sparkles,
   X
 } from 'lucide-react';
+import { ApiError, ApiMeResponse, createCheckout, getMe } from '@/lib/api';
 
 export default function BillingPage() {
-  const [billingCycle, setBillingCycle] = useState<'monthly' | 'yearly'>('monthly');
   const [isCheckoutOpen, setIsCheckoutOpen] = useState(false);
-  const [selectedPlan, setSelectedPlan] = useState<string>('Pro');
+  const [checkoutLoading, setCheckoutLoading] = useState(false);
+  const [checkoutError, setCheckoutError] = useState<string | null>(null);
 
-  const handleOpenCheckout = (planName: string) => {
-    setSelectedPlan(planName);
+  const [meData, setMeData] = useState<ApiMeResponse | null>(null);
+  const [meLoading, setMeLoading] = useState(true);
+  const [meError, setMeError] = useState<string | null>(null);
+
+  const loadMe = useCallback(async () => {
+    setMeLoading(true);
+    setMeError(null);
+    try {
+      const data = await getMe();
+      setMeData(data);
+    } catch (err) {
+      if (err instanceof ApiError) {
+        if (err.status === 401) {
+          setMeError('You must be signed in to view billing information.');
+        } else {
+          setMeError(err.message);
+        }
+      } else {
+        setMeError('Failed to load account information.');
+      }
+    } finally {
+      setMeLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    loadMe();
+  }, [loadMe]);
+
+  const planName = meData?.plan ?? 'free';
+  const isPro = planName === 'pro';
+  const monthlyScanLimit = meData?.limits.monthly_scans ?? 50;
+  const scansUsed = meData?.usage.scans_this_month ?? 0;
+  const scanPercent = monthlyScanLimit > 0 ? Math.min(100, Math.round((scansUsed / monthlyScanLimit) * 100)) : 0;
+
+  const handleOpenCheckout = () => {
+    setCheckoutError(null);
     setIsCheckoutOpen(true);
   };
+
+  const handleStartCheckout = async () => {
+    setCheckoutLoading(true);
+    setCheckoutError(null);
+    try {
+      const { url } = await createCheckout('pro');
+      window.location.href = url;
+    } catch (err) {
+      if (err instanceof ApiError) {
+        if (err.status === 401) {
+          setCheckoutError('Please sign in before upgrading.');
+        } else if (err.status === 409) {
+          setCheckoutError('You already have an active Pro subscription.');
+        } else if (err.status === 503) {
+          setCheckoutError('Billing is not configured on this server yet.');
+        } else {
+          setCheckoutError(err.message);
+        }
+      } else {
+        setCheckoutError('Something went wrong. Please try again.');
+      }
+      setCheckoutLoading(false);
+    }
+  };
+
+  if (meLoading) {
+    return (
+      <div className="min-h-screen bg-slate-50 dark:bg-slate-950 flex items-center justify-center">
+        <Loader2 className="h-8 w-8 animate-spin text-emerald-500" />
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100 p-6 md:p-10 transition-colors">
       <div className="max-w-6xl mx-auto space-y-8">
-        
+
         {/* Header */}
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-slate-200 dark:border-slate-800 pb-6">
           <div>
-            <h1 className="text-3xl font-bold tracking-tight">Billing & Subscriptions</h1>
+            <h1 className="text-3xl font-bold tracking-tight">Billing &amp; Subscriptions</h1>
             <p className="text-slate-600 dark:text-slate-400 mt-1">
-              Manage your plan tier, usage allocations, and invoices.
+              Manage your plan tier and usage allocations.
             </p>
           </div>
           <div className="flex items-center space-x-3">
@@ -47,9 +114,19 @@ export default function BillingPage() {
           </div>
         </div>
 
+        {meError && (
+          <div
+            role="alert"
+            className="flex items-start gap-2 rounded-lg border border-red-300 bg-red-50 px-3.5 py-3 text-sm text-red-700 dark:border-red-500/30 dark:bg-red-500/10 dark:text-red-300"
+          >
+            <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
+            <span>{meError}</span>
+          </div>
+        )}
+
         {/* Current Active Status & Usage Overview */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-          
+
           {/* Active Plan Card */}
           <div className="md:col-span-1 p-6 rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 flex flex-col justify-between shadow-sm">
             <div>
@@ -59,23 +136,27 @@ export default function BillingPage() {
                   Active
                 </span>
               </div>
-              <h2 className="text-2xl font-bold mt-3">Free Tier</h2>
+              <h2 className="text-2xl font-bold mt-3">{isPro ? 'Pro' : 'Free'} Tier</h2>
               <p className="text-sm text-slate-600 dark:text-slate-400 mt-1">
-                For individual developers building personal projects and prototypes.
+                {isPro
+                  ? 'Unlimited scans, AI fixes, and priority support.'
+                  : 'For individual developers building personal projects and prototypes.'}
               </p>
             </div>
 
             <div className="mt-6 pt-4 border-t border-slate-200 dark:border-slate-800 flex items-center justify-between">
               <div>
-                <span className="text-3xl font-extrabold">$0</span>
+                <span className="text-3xl font-extrabold">{isPro ? '$29' : '$0'}</span>
                 <span className="text-xs text-slate-500 dark:text-slate-400"> / month</span>
               </div>
-              <button 
-                onClick={() => handleOpenCheckout('Pro')}
-                className="px-4 py-2 text-xs font-semibold bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg transition-colors flex items-center gap-1.5 shadow-sm"
-              >
-                Upgrade <ArrowUpRight className="h-3.5 w-3.5" />
-              </button>
+              {!isPro && (
+                <button
+                  onClick={handleOpenCheckout}
+                  className="px-4 py-2 text-xs font-semibold bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg transition-colors flex items-center gap-1.5 shadow-sm"
+                >
+                  Upgrade <ArrowUpRight className="h-3.5 w-3.5" />
+                </button>
+              )}
             </div>
           </div>
 
@@ -92,37 +173,24 @@ export default function BillingPage() {
                   <span className="font-medium flex items-center gap-2">
                     <BarChart3 className="h-4 w-4 text-emerald-500" /> Code Scans
                   </span>
-                  <span className="text-xs text-slate-500 dark:text-slate-400 font-mono">42 / 50 Scans</span>
+                  <span className="text-xs text-slate-500 dark:text-slate-400 font-mono">
+                    {scansUsed} / {isPro ? '∞' : monthlyScanLimit} Scans
+                  </span>
                 </div>
                 <div className="w-full h-2.5 bg-slate-100 dark:bg-slate-800 rounded-full overflow-hidden">
-                  <div className="h-full bg-emerald-500 rounded-full transition-all duration-300" style={{ width: '84%' }}></div>
+                  <div
+                    className="h-full bg-emerald-500 rounded-full transition-all duration-300"
+                    style={{ width: isPro ? '5%' : `${scanPercent}%` }}
+                  />
                 </div>
               </div>
 
-              {/* Team Seats */}
-              <div>
-                <div className="flex justify-between text-sm mb-1.5">
-                  <span className="font-medium flex items-center gap-2">
-                    <Users className="h-4 w-4 text-cyan-500" /> Team Seats
-                  </span>
-                  <span className="text-xs text-slate-500 dark:text-slate-400 font-mono">1 / 1 Seat</span>
-                </div>
-                <div className="w-full h-2.5 bg-slate-100 dark:bg-slate-800 rounded-full overflow-hidden">
-                  <div className="h-full bg-cyan-500 rounded-full transition-all duration-300" style={{ width: '100%' }}></div>
-                </div>
-              </div>
-
-              {/* API Keys */}
-              <div>
-                <div className="flex justify-between text-sm mb-1.5">
-                  <span className="font-medium flex items-center gap-2">
-                    <Key className="h-4 w-4 text-purple-500" /> API Keys Created
-                  </span>
-                  <span className="text-xs text-slate-500 dark:text-slate-400 font-mono">2 / 3 Keys</span>
-                </div>
-                <div className="w-full h-2.5 bg-slate-100 dark:bg-slate-800 rounded-full overflow-hidden">
-                  <div className="h-full bg-purple-500 rounded-full transition-all duration-300" style={{ width: '66%' }}></div>
-                </div>
+              {/* Auto-Rescan */}
+              <div className="flex items-center justify-between text-sm">
+                <span className="font-medium">Auto-rescan</span>
+                <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${meData?.limits.auto_rescan ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400' : 'bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400'}`}>
+                  {meData?.limits.auto_rescan ? 'Enabled' : 'Disabled'}
+                </span>
               </div>
             </div>
           </div>
@@ -130,41 +198,15 @@ export default function BillingPage() {
 
         {/* 2-Tier Subscription Cards (Free vs Pro) */}
         <div className="space-y-6 pt-4">
-          <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-            <div>
-              <h2 className="text-2xl font-bold">Subscription Plans</h2>
-              <p className="text-sm text-slate-600 dark:text-slate-400">
-                Select a tier to scale your repository security and compliance automation.
-              </p>
-            </div>
-
-            {/* Monthly / Yearly Toggle */}
-            <div className="flex items-center bg-slate-200/60 dark:bg-slate-800/80 p-1 rounded-xl w-fit self-start md:self-auto border border-slate-300/40 dark:border-slate-700/50">
-              <button
-                onClick={() => setBillingCycle('monthly')}
-                className={`px-3.5 py-1.5 text-xs font-semibold rounded-lg transition-all ${
-                  billingCycle === 'monthly'
-                    ? 'bg-white dark:bg-slate-900 text-slate-900 dark:text-white shadow-sm'
-                    : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
-                }`}
-              >
-                Monthly
-              </button>
-              <button
-                onClick={() => setBillingCycle('yearly')}
-                className={`px-3.5 py-1.5 text-xs font-semibold rounded-lg transition-all flex items-center gap-1.5 ${
-                  billingCycle === 'yearly'
-                    ? 'bg-white dark:bg-slate-900 text-slate-900 dark:text-white shadow-sm'
-                    : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
-                }`}
-              >
-                Yearly <span className="text-[10px] bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 px-1.5 py-0.5 rounded font-bold border border-emerald-500/20">20% OFF</span>
-              </button>
-            </div>
+          <div>
+            <h2 className="text-2xl font-bold">Subscription Plans</h2>
+            <p className="text-sm text-slate-600 dark:text-slate-400">
+              Select a tier to scale your repository security and compliance automation.
+            </p>
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-8 pt-2">
-            
+
             {/* Free Tier Card */}
             <div className="p-8 rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 flex flex-col justify-between shadow-sm relative hover:border-slate-300 dark:hover:border-slate-700 transition-all">
               <div>
@@ -190,9 +232,6 @@ export default function BillingPage() {
                       <Check className="h-4 w-4 text-emerald-500 shrink-0" /> Up to 50 security scans per month
                     </li>
                     <li className="flex items-center gap-2.5">
-                      <Check className="h-4 w-4 text-emerald-500 shrink-0" /> 1 Active team seat
-                    </li>
-                    <li className="flex items-center gap-2.5">
                       <Check className="h-4 w-4 text-emerald-500 shrink-0" /> Standard vulnerability assessment
                     </li>
                     <li className="flex items-center gap-2.5">
@@ -203,10 +242,14 @@ export default function BillingPage() {
               </div>
 
               <button
-                disabled
-                className="mt-8 w-full py-2.5 bg-slate-100 dark:bg-slate-800 text-slate-400 dark:text-slate-500 font-medium text-sm rounded-xl cursor-not-allowed border border-slate-200 dark:border-slate-700/50"
+                disabled={!isPro}
+                className={`mt-8 w-full py-2.5 font-medium text-sm rounded-xl border ${
+                  !isPro
+                    ? 'bg-slate-100 dark:bg-slate-800 text-slate-400 dark:text-slate-500 cursor-not-allowed border-slate-200 dark:border-slate-700/50'
+                    : 'bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-300 border-slate-300 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors'
+                }`}
               >
-                Current Plan
+                {!isPro ? 'Current Plan' : 'Downgrade'}
               </button>
             </div>
 
@@ -228,9 +271,7 @@ export default function BillingPage() {
                 </p>
 
                 <div className="my-6">
-                  <span className="text-4xl font-extrabold">
-                    {billingCycle === 'monthly' ? '$29' : '$23'}
-                  </span>
+                  <span className="text-4xl font-extrabold">$29</span>
                   <span className="text-sm text-slate-500 dark:text-slate-400"> / month</span>
                 </div>
 
@@ -241,13 +282,10 @@ export default function BillingPage() {
                       <Check className="h-4 w-4 text-emerald-500 shrink-0" /> Unlimited code and container scans
                     </li>
                     <li className="flex items-center gap-2.5">
-                      <Check className="h-4 w-4 text-emerald-500 shrink-0" /> Up to 10 Team seats included
+                      <Check className="h-4 w-4 text-emerald-500 shrink-0" /> Automated AI Data Masking &amp; Fix generation
                     </li>
                     <li className="flex items-center gap-2.5">
-                      <Check className="h-4 w-4 text-emerald-500 shrink-0" /> Automated AI Data Masking & Fix generation
-                    </li>
-                    <li className="flex items-center gap-2.5">
-                      <Check className="h-4 w-4 text-emerald-500 shrink-0" /> Custom Webhook & CI/CD Pipeline integration
+                      <Check className="h-4 w-4 text-emerald-500 shrink-0" /> Custom Webhook &amp; CI/CD Pipeline integration
                     </li>
                     <li className="flex items-center gap-2.5">
                       <Check className="h-4 w-4 text-emerald-500 shrink-0" /> Priority 24/7 technical support
@@ -256,75 +294,34 @@ export default function BillingPage() {
                 </div>
               </div>
 
-              <button
-                onClick={() => handleOpenCheckout('Pro')}
-                className="mt-8 w-full py-2.5 bg-emerald-600 hover:bg-emerald-700 active:bg-emerald-800 text-white font-semibold text-sm rounded-xl transition-all shadow-md shadow-emerald-500/10 flex items-center justify-center gap-2"
-              >
-                Get Pro Access <ArrowUpRight className="h-4 w-4" />
-              </button>
+              {isPro ? (
+                <button
+                  disabled
+                  className="mt-8 w-full py-2.5 bg-slate-100 dark:bg-slate-800 text-slate-400 dark:text-slate-500 font-medium text-sm rounded-xl cursor-not-allowed border border-slate-200 dark:border-slate-700/50"
+                >
+                  Current Plan
+                </button>
+              ) : (
+                <button
+                  onClick={handleOpenCheckout}
+                  className="mt-8 w-full py-2.5 bg-emerald-600 hover:bg-emerald-700 active:bg-emerald-800 text-white font-semibold text-sm rounded-xl transition-all shadow-md shadow-emerald-500/10 flex items-center justify-center gap-2"
+                >
+                  Get Pro Access <ArrowUpRight className="h-4 w-4" />
+                </button>
+              )}
             </div>
 
-          </div>
-        </div>
-
-        {/* Invoice History */}
-        <div className="pt-6 border-t border-slate-200 dark:border-slate-800 space-y-4">
-          <div className="flex justify-between items-center">
-            <h2 className="text-xl font-bold">Invoice History</h2>
-            <button 
-              onClick={() => alert('Opening Whop portal...')}
-              className="text-xs text-emerald-600 dark:text-emerald-400 hover:underline flex items-center gap-1 font-medium"
-            >
-              Manage on Whop Portal <ExternalLink className="h-3 w-3" />
-            </button>
-          </div>
-
-          <div className="border border-slate-200 dark:border-slate-800 rounded-2xl overflow-hidden bg-white dark:bg-slate-900 shadow-sm">
-            <div className="overflow-x-auto">
-              <table className="w-full text-left text-sm">
-                <thead className="bg-slate-50 dark:bg-slate-800/50 text-slate-500 border-b border-slate-200 dark:border-slate-800 text-xs uppercase tracking-wider">
-                  <tr>
-                    <th className="p-4 font-semibold">Invoice ID</th>
-                    <th className="p-4 font-semibold">Date</th>
-                    <th className="p-4 font-semibold">Amount</th>
-                    <th className="p-4 font-semibold">Status</th>
-                    <th className="p-4 font-semibold text-right">Receipt</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-200 dark:divide-slate-800">
-                  <tr className="hover:bg-slate-50/50 dark:hover:bg-slate-800/30 transition-colors">
-                    <td className="p-4 font-mono text-xs font-medium">INV-2026-001</td>
-                    <td className="p-4 text-slate-600 dark:text-slate-400">Sep 15, 2026</td>
-                    <td className="p-4 font-medium">$0.00</td>
-                    <td className="p-4">
-                      <span className="px-2.5 py-0.5 text-xs rounded-full bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20 font-medium">
-                        Paid
-                      </span>
-                    </td>
-                    <td className="p-4 text-right">
-                      <button 
-                        onClick={() => alert('Downloading invoice PDF...')}
-                        className="p-1.5 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg transition-colors text-slate-500 hover:text-slate-900 dark:hover:text-white"
-                        title="Download Invoice PDF"
-                      >
-                        <Download className="h-4 w-4" />
-                      </button>
-                    </td>
-                  </tr>
-                </tbody>
-              </table>
-            </div>
           </div>
         </div>
 
       </div>
 
-      {/* Whop Checkout Modal Container */}
+      {/* Whop Checkout Modal */}
       {isCheckoutOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm">
           <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl w-full max-w-lg p-6 shadow-2xl relative">
             <button
-              onClick={() => setIsCheckoutOpen(false)}
+              onClick={() => { setIsCheckoutOpen(false); setCheckoutError(null); }}
               className="absolute top-4 right-4 p-1.5 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg transition-colors"
             >
               <X className="h-5 w-5" />
@@ -332,24 +329,45 @@ export default function BillingPage() {
             <div className="space-y-4">
               <div className="flex items-center gap-2">
                 <ShieldCheck className="h-6 w-6 text-emerald-500" />
-                <h3 className="text-xl font-bold">Whop Checkout Integration</h3>
+                <h3 className="text-xl font-bold">Upgrade to Pro</h3>
               </div>
               <p className="text-sm text-slate-600 dark:text-slate-400">
-                You are subscribing to the <strong className="text-slate-900 dark:text-white">{selectedPlan} Plan</strong> ({billingCycle}).
+                You are subscribing to the <strong className="text-slate-900 dark:text-white">Pro Plan</strong> ($29/month).
+                You will be redirected to our payment provider to complete the purchase.
               </p>
-              
-              {/* Whop Embed Container Placeholder */}
-              <div className="min-h-[220px] rounded-xl border border-dashed border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/50 flex flex-col items-center justify-center p-6 text-center">
-                <p className="text-sm text-slate-500 dark:text-slate-400">
-                  [ Embed Whop Checkout iframe or widget component here ]
-                </p>
-              </div>
+
+              {checkoutError && (
+                <div
+                  role="alert"
+                  className="flex items-start gap-2 rounded-lg border border-red-300 bg-red-50 px-3.5 py-3 text-sm text-red-700 dark:border-red-500/30 dark:bg-red-500/10 dark:text-red-300"
+                >
+                  <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
+                  <span>{checkoutError}</span>
+                </div>
+              )}
 
               <button
-                onClick={() => setIsCheckoutOpen(false)}
-                className="w-full py-2.5 bg-slate-900 dark:bg-slate-100 text-white dark:text-slate-900 font-semibold text-sm rounded-xl hover:opacity-90 transition-opacity"
+                onClick={handleStartCheckout}
+                disabled={checkoutLoading}
+                className="w-full py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white font-semibold text-sm rounded-xl transition-all shadow-md shadow-emerald-500/10 flex items-center justify-center gap-2 disabled:opacity-60 disabled:cursor-not-allowed"
               >
-                Close Window
+                {checkoutLoading ? (
+                  <>
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                    Redirecting to checkout…
+                  </>
+                ) : (
+                  <>
+                    Continue to Payment <ArrowUpRight className="h-4 w-4" />
+                  </>
+                )}
+              </button>
+
+              <button
+                onClick={() => { setIsCheckoutOpen(false); setCheckoutError(null); }}
+                className="w-full py-2.5 bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 font-medium text-sm rounded-xl hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors"
+              >
+                Cancel
               </button>
             </div>
           </div>

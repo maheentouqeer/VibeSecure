@@ -16,6 +16,7 @@ import {
   MailCheck,
   ArrowLeft,
 } from "lucide-react";
+import { supabase } from "@/lib/supabase";
 
 function cx(...classes: Array<string | false | null | undefined>) {
   return classes.filter(Boolean).join(" ");
@@ -24,7 +25,7 @@ function cx(...classes: Array<string | false | null | undefined>) {
 function ThemeToggle() {
   const { resolvedTheme, setTheme } = useTheme();
   const [mounted, setMounted] = useState(false);
- useEffect(() => {
+  useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect
     setMounted(true);
   }, []);
@@ -104,7 +105,7 @@ export default function ForgotPasswordPage() {
   const [isLoading, setIsLoading] = useState(false);
   const [submittedEmail, setSubmittedEmail] = useState<string | null>(null);
 
-  function handleSubmit(e: React.FormEvent) {
+  async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setFormError(null);
 
@@ -119,15 +120,17 @@ export default function ForgotPasswordPage() {
     setEmailError(null);
     setIsLoading(true);
 
-    // TODO: Wire to Supabase Auth client when Aneel's backend lands
-    // const { error } = await supabase.auth.resetPasswordForEmail(email, {
-    //   redirectTo: `${window.location.origin}/reset-password`,
-    // });
-    // if (error) { setFormError(error.message); setIsLoading(false); return; }
-    setTimeout(() => {
-      setIsLoading(false);
+    const { error } = await supabase.auth.resetPasswordForEmail(email, {
+      redirectTo: `${window.location.origin}/login`,
+    });
+
+    setIsLoading(false);
+
+    if (error) {
+      setFormError(error.message);
+    } else {
       setSubmittedEmail(email);
-    }, 1500);
+    }
   }
 
   return (

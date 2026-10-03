@@ -1,4 +1,4 @@
-/**
+﻿/**
  * Real backend client -- replaces the mock data page.tsx used to generate.
  *
  * Ownership model (matches backend/main.py exactly): the backend issues an
@@ -6,6 +6,8 @@
  * request for that scan. We persist it in localStorage so a returning
  * visitor's later scans/rescans/badge checks are still recognized as theirs.
  */
+
+import { supabase } from "./supabase";
 
 export const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 
@@ -48,13 +50,25 @@ export interface ApiScan {
   findings: ApiFinding[];
 }
 
-export class ApiError extends Error {}
+export class ApiError extends Error {
+  constructor(message: string, public status?: number) {
+    super(message);
+    this.name = "ApiError";
+  }
+}
 
 async function apiFetch<T = ApiScan>(path: string, init: RequestInit = {}, signal?: AbortSignal): Promise<T> {
   const token = getOwnerToken();
   const headers = new Headers(init.headers);
   headers.set("Content-Type", "application/json");
   if (token) headers.set("X-Owner-Token", token);
+
+  const {
+    data: { session },
+  } = await supabase.auth.getSession();
+  if (session?.access_token) {
+    headers.set("Authorization", `Bearer ${session.access_token}`);
+  }
 
   const res = await fetch(`${API_URL}${path}`, { ...init, headers, signal });
 
@@ -63,7 +77,7 @@ async function apiFetch<T = ApiScan>(path: string, init: RequestInit = {}, signa
 
   if (!res.ok) {
     const body = await res.json().catch(() => ({}) as { detail?: string });
-    throw new ApiError(body.detail || `Request failed with status ${res.status}`);
+    throw new ApiError(body.detail || `Request failed with status ${res.status}`, res.status);
   }
   return res.json();
 }
@@ -124,8 +138,36 @@ export function getScan(scanId: string, signal?: AbortSignal): Promise<ApiScan> 
 
 export async function listScans(signal?: AbortSignal): Promise<ApiScan[]> {
   const token = getOwnerToken();
-  if (!token) return [];
-  const res = await fetch(`${API_URL}/scans`, { headers: { "X-Owner-Token": token }, signal });
+  const headers: Record<string, string> = {};
+  if (token) headers["X-Owner-Token"] = token;
+  const {
+    data: { session },
+  } = await supabase.auth.getSession();
+  if (session?.access_token) {
+    headers["Authorization"] = `Bearer ${session.access_token}`;
+  }
+  const res = await fetch(`${API_URL}/scans`, { headers, signal });
   if (!res.ok) return [];
   return res.json();
+}
+
+export interface ApiMeResponse {
+  user: { id: string; email: string } | null;
+  plan: string;
+  limits: { monthly_scans: number; auto_rescan: boolean };
+  usage: { scans_this_month: number };
+  enforced: boolean;
+  orgs: { id: string; name: string; role: string }[];
+}
+
+export async function getMe(signal?: AbortSignal): Promise<ApiMeResponse> {
+  return apiFetch<ApiMeResponse>("/me", {}, signal);
+}
+
+export async function claimScans(signal?: AbortSignal): Promise<{ claimed: number }> {
+  return apiFetch<{ claimed: number }>("/me/claim", { method: "POST" }, signal);
+}
+
+export async function createCheckout(plan: "pro" = "pro", signal?: AbortSignal): Promise<{ url: string }> {
+  return apiFetch<{ url: string }>("/billing/checkout", { method: "POST", body: JSON.stringify({ plan }) }, signal);
 }
