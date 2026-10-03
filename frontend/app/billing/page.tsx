@@ -97,7 +97,7 @@ export default function BillingPage() {
       <div className="max-w-6xl mx-auto space-y-8">
 
         {/* Header */}
-        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-slate-200 dark:border-slate-800 pb-6">
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-slate-900/10 dark:border-white/10 pb-6">
           <div>
             <h1 className="text-3xl font-bold tracking-tight">Billing &amp; Subscriptions</h1>
             <p className="text-slate-600 dark:text-slate-400 mt-1">
@@ -107,7 +107,7 @@ export default function BillingPage() {
           <div className="flex items-center space-x-3">
             <Link
               href="/settings"
-              className="px-4 py-2 border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 rounded-lg text-sm font-medium hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors shadow-sm"
+              className="px-4 py-2 glass-button rounded-lg text-sm font-medium hover:bg-white/10 transition-colors shadow-none"
             >
               Account Settings
             </Link>
@@ -128,7 +128,7 @@ export default function BillingPage() {
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
 
           {/* Active Plan Card */}
-          <div className="md:col-span-1 p-6 rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 flex flex-col justify-between shadow-sm">
+          <div className="md:col-span-1 glass-panel p-6 flex flex-col justify-between shadow-none">
             <div>
               <div className="flex items-center justify-between">
                 <span className="text-xs uppercase tracking-wider text-slate-500 font-semibold">Current Plan</span>
@@ -152,7 +152,7 @@ export default function BillingPage() {
               {!isPro && (
                 <button
                   onClick={handleOpenCheckout}
-                  className="px-4 py-2 text-xs font-semibold bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg transition-colors flex items-center gap-1.5 shadow-sm"
+                  className="px-4 py-2 text-xs font-semibold bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg transition-colors flex items-center gap-1.5 shadow-none"
                 >
                   Upgrade <ArrowUpRight className="h-3.5 w-3.5" />
                 </button>
@@ -161,8 +161,8 @@ export default function BillingPage() {
           </div>
 
           {/* Usage Stats Meter */}
-          <div className="md:col-span-2 p-6 rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 space-y-6 shadow-sm">
-            <h3 className="text-lg font-semibold border-b border-slate-200 dark:border-slate-800 pb-3">
+          <div className="md:col-span-2 glass-panel p-6 space-y-6 shadow-none">
+            <h3 className="text-lg font-semibold border-b border-slate-900/10 dark:border-white/10 pb-3">
               Monthly Resource Usage
             </h3>
 
@@ -177,7 +177,7 @@ export default function BillingPage() {
                     {scansUsed} / {isPro ? '∞' : monthlyScanLimit} Scans
                   </span>
                 </div>
-                <div className="w-full h-2.5 bg-slate-100 dark:bg-slate-800 rounded-full overflow-hidden">
+                <div className="w-full h-2.5 bg-white/5 rounded-full overflow-hidden">
                   <div
                     className="h-full bg-emerald-500 rounded-full transition-all duration-300"
                     style={{ width: isPro ? '5%' : `${scanPercent}%` }}
@@ -188,7 +188,7 @@ export default function BillingPage() {
               {/* Auto-Rescan */}
               <div className="flex items-center justify-between text-sm">
                 <span className="font-medium">Auto-rescan</span>
-                <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${meData?.limits.auto_rescan ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400' : 'bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400'}`}>
+                <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${meData?.limits.auto_rescan ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400' : 'bg-white/5 text-slate-500 dark:text-slate-400'}`}>
                   {meData?.limits.auto_rescan ? 'Enabled' : 'Disabled'}
                 </span>
               </div>
@@ -208,11 +208,11 @@ export default function BillingPage() {
           <div className="grid grid-cols-1 md:grid-cols-2 gap-8 pt-2">
 
             {/* Free Tier Card */}
-            <div className="p-8 rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 flex flex-col justify-between shadow-sm relative hover:border-slate-300 dark:hover:border-slate-700 transition-all">
+            <div className="glass-panel p-8 flex flex-col justify-between shadow-none relative hover:border-slate-300 dark:hover:border-slate-700 transition-all">
               <div>
                 <div className="flex justify-between items-center">
                   <h3 className="text-xl font-bold">Free Tier</h3>
-                  <span className="text-xs bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 px-2.5 py-1 rounded-full font-medium">
+                  <span className="text-xs bg-white/5 text-slate-600 dark:text-slate-400 px-2.5 py-1 rounded-full font-medium">
                     Hobby
                   </span>
                 </div>
@@ -245,8 +245,8 @@ export default function BillingPage() {
                 disabled={!isPro}
                 className={`mt-8 w-full py-2.5 font-medium text-sm rounded-xl border ${
                   !isPro
-                    ? 'bg-slate-100 dark:bg-slate-800 text-slate-400 dark:text-slate-500 cursor-not-allowed border-slate-200 dark:border-slate-700/50'
-                    : 'bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-300 border-slate-300 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors'
+                    ? 'bg-white/5 text-slate-400 dark:text-slate-500 cursor-not-allowed border-slate-200 dark:border-slate-700/50'
+                    : 'bg-white/5 text-slate-700 dark:text-slate-300 border-slate-300 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors'
                 }`}
               >
                 {!isPro ? 'Current Plan' : 'Downgrade'}
@@ -254,8 +254,8 @@ export default function BillingPage() {
             </div>
 
             {/* Pro Tier Card (Highlighted) */}
-            <div className="p-8 rounded-2xl border-2 border-emerald-500 bg-white dark:bg-slate-900 flex flex-col justify-between shadow-md relative hover:shadow-xl transition-all">
-              <span className="absolute -top-3.5 right-6 bg-gradient-to-r from-emerald-600 to-teal-600 text-white text-[11px] uppercase tracking-wider font-bold px-3 py-0.5 rounded-full shadow-sm flex items-center gap-1">
+            <div className="p-8 rounded-2xl border-2 border-emerald-500 bg-white/5 flex flex-col justify-between shadow-md relative hover:shadow-xl transition-all">
+              <span className="absolute -top-3.5 right-6 bg-gradient-to-r from-emerald-600 to-teal-600 text-white text-[11px] uppercase tracking-wider font-bold px-3 py-0.5 rounded-full shadow-none flex items-center gap-1">
                 <Sparkles className="h-3 w-3" /> Recommended
               </span>
 
@@ -297,7 +297,7 @@ export default function BillingPage() {
               {isPro ? (
                 <button
                   disabled
-                  className="mt-8 w-full py-2.5 bg-slate-100 dark:bg-slate-800 text-slate-400 dark:text-slate-500 font-medium text-sm rounded-xl cursor-not-allowed border border-slate-200 dark:border-slate-700/50"
+                  className="mt-8 w-full py-2.5 bg-white/5 text-slate-400 dark:text-slate-500 font-medium text-sm rounded-xl cursor-not-allowed border border-slate-200 dark:border-slate-700/50"
                 >
                   Current Plan
                 </button>
@@ -319,10 +319,10 @@ export default function BillingPage() {
       {/* Whop Checkout Modal */}
       {isCheckoutOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm">
-          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl w-full max-w-lg p-6 shadow-2xl relative">
+          <div className="glass-panel rounded-2xl w-full max-w-lg p-6 shadow-2xl relative">
             <button
               onClick={() => { setIsCheckoutOpen(false); setCheckoutError(null); }}
-              className="absolute top-4 right-4 p-1.5 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg transition-colors"
+              className="absolute top-4 right-4 p-1.5 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 hover:bg-white/10 rounded-lg transition-colors"
             >
               <X className="h-5 w-5" />
             </button>
@@ -365,7 +365,7 @@ export default function BillingPage() {
 
               <button
                 onClick={() => { setIsCheckoutOpen(false); setCheckoutError(null); }}
-                className="w-full py-2.5 bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 font-medium text-sm rounded-xl hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors"
+                className="w-full py-2.5 bg-white/5 text-slate-600 dark:text-slate-300 font-medium text-sm rounded-xl hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors"
               >
                 Cancel
               </button>
