@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import anyio
 from mcp.server.fastmcp import FastMCP
+from sqlalchemy import update
 from starlette.types import ASGIApp, Receive, Scope, Send
 
 from backend import api_keys, db, jobs, plans
@@ -84,10 +85,22 @@ def _start_rescan(user_id: str, scan_id: str) -> str:
         )
         if scan is None:
             raise ValueError("Scan not found.")
-        if scan.status in ('queued', 'running'):
+        user = session.get(db.User, user_id)
+        if user is None:
+            raise ValueError("MCP account no longer exists.")
+        plans.enforce_monthly_limit(session, Actor(user=user, owner_token=None))
+        claimed = session.execute(
+            update(db.Scan)
+            .where(
+                db.Scan.id == scan_id,
+                db.Scan.owner_user_id == user_id,
+                db.Scan.status.notin_(('queued', 'running')),
+            )
+            .values(status='queued', error=None)
+        ).rowcount
+        if claimed != 1:
+            session.rollback()
             raise ValueError("This scan is already running.")
-        scan.status = 'queued'
-        scan.error = None
         session.add(db.ScanRun(
             scan_id=scan.id, kind='rescan', owner_user_id=user_id, owner_token=scan.owner_token
         ))
