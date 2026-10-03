@@ -273,23 +273,43 @@ Pro/Team users can scan their private GitHub repos through their own account. Cr
 
 ## MCP Server (scan from inside your AI coding tool)
 
-`mcp_server.py` exposes the scanner to Claude Code, Cursor, VS Code Copilot agent mode, Claude Desktop, and any other MCP client. It runs on your machine over stdio, and `scan_workspace` reads your project straight from disk: nothing is cloned and no GitHub token is needed.
+`mcp_server.py` exposes VibeSecure to Claude Code, Cursor, VS Code Copilot agent mode, Claude Desktop, and other MCP clients over **local stdio**.
 
-| Tool | What it does |
+### MCP tools
+
+| Tool | Purpose |
 |---|---|
-| `scan_workspace(path)` | Scan a local folder; returns findings with explanations, fix prompts, and a stable `fingerprint` each |
-| `verify_fixes(path, fingerprints)` | Re-scan and report which findings are `resolved`, `still_present`, or new |
-| `scan_url(target)` | Scan a public repo URL or live app URL (private/internal addresses refused) |
+| `scan_repository(repo_url)` | Scan a public GitHub/GitLab/Bitbucket repository with the full source scanner + AI enrichment |
+| `scan_local_workspace(path)` | Scan the files already present on the caller's machine; no cloning or GitHub auth |
+| `scan_live_url(url)` | Run passive, read-only HTTP checks against a public deployed application |
+| `get_scan_status(scan_id)` | Read the status/summary of a local MCP scan |
+| `get_findings(scan_id)` | Retrieve the enriched findings for a previous MCP scan |
+| `rescan(scan_id)` | Re-run the same target and report resolved, still-present, and new findings |
 
-Client configuration (VS Code `.vscode/mcp.json`, Cursor, Claude Desktop):
+Backward-compatible aliases are retained for existing client configurations: `scan_workspace`, `scan_url`, and `verify_fixes`.
+
+### Local-workspace flow
+
+The important MCP path is local workspace mode. When an AI coding tool invokes `scan_local_workspace`, VibeSecure reads the project directly from the caller's filesystem and returns structured findings, fingerprints, explanations, and ready-to-use fix prompts. No repository clone is required.
+
+### Current transport/auth boundary
+
+The repository currently ships a local **stdio MCP server**. Per-account API-key authentication, usage metering, and a public Streamable HTTP MCP endpoint are the next SaaS layer; they are not claimed as implemented by the local server.
+
+Client configuration example:
 
 ```json
-{ "command": "python", "args": ["/absolute/path/to/secure-vibecode/mcp_server.py"] }
+{
+  "mcpServers": {
+    "vibesecure": {
+      "command": "python",
+      "args": ["/absolute/path/to/VibeSecure/mcp_server.py"]
+    }
+  }
+}
 ```
 
-For Claude Code: `claude mcp add secure-vibecode -- python /absolute/path/to/secure-vibecode/mcp_server.py`. Use the Python from the virtual environment where you ran `pip install -r requirements.txt`. Set `GEMINI_API_KEY` in the environment for AI-written explanations; otherwise deterministic templates are used.
-
----
+Set `GEMINI_API_KEY` in the MCP process environment for AI-written explanations and fix prompts. Without it, VibeSecure uses deterministic fallbacks.
 
 ## Running Evaluations
 
