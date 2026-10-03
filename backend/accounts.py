@@ -20,7 +20,7 @@ from datetime import datetime, timezone
 from typing import Literal
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Request, Response
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy import update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, selectinload
@@ -40,6 +40,8 @@ class ApiKeyCreate(BaseModel):
     label: str = Field(default="VibeSecure API key", min_length=1, max_length=80)
 
 class ApiKeyMeta(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
     id: str
     label: str
     key_prefix: str
