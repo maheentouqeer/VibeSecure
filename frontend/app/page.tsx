@@ -92,7 +92,7 @@ function mapScan(s: ApiScan): ScanResult {
 // ---------------------------------------------------------------------------
 // Constants / mock data helpers
 // ---------------------------------------------------------------------------
-const DEMO_REPO_URL = "https://github.com/vibecode-demo/leaky-todo-app";
+const DEMO_REPO_URL = "https://github.com/maheentouqeer/test-vibesecure";
 
 const SCAN_STEPS = [
   { id: "clone", label: "Cloning repository..." },
@@ -134,17 +134,17 @@ function formatDate(iso: string): string {
 // ---------------------------------------------------------------------------
 function getTheme(isDark: boolean) {
   return {
-    pageBg: isDark ? "bg-slate-950" : "bg-white",
+    pageBg: "bg-transparent",
     pageText: isDark ? "text-slate-50" : "text-slate-900",
-    headerBorder: isDark ? "border-slate-800" : "border-slate-200",
-    headerBg: isDark ? "bg-slate-950/80" : "bg-white/80",
+    headerBorder: "",
+    headerBg: "glass-header",
     navLink: isDark ? "text-slate-400 hover:text-slate-100" : "text-slate-500 hover:text-slate-900",
     navLinkActive: isDark ? "text-slate-100" : "text-slate-900",
     ghostBtn: isDark
       ? "border-slate-700 text-slate-300 hover:border-emerald-500/50 hover:text-emerald-400"
       : "border-slate-300 text-slate-700 hover:border-emerald-500/50 hover:text-emerald-600",
-    cardBg: isDark ? "border-slate-800 bg-slate-900/60" : "border-slate-200 bg-white",
-    cardShadow: isDark ? "shadow-black/40" : "shadow-slate-200/50",
+    cardBg: "glass-panel",
+    cardShadow: "shadow-none",
     subText: isDark ? "text-slate-400" : "text-slate-500",
     mutedText: isDark ? "text-slate-500" : "text-slate-400",
     label: isDark ? "text-slate-300" : "text-slate-700",
@@ -152,12 +152,12 @@ function getTheme(isDark: boolean) {
       ? "bg-slate-950/70 border-slate-700 text-slate-100 placeholder-slate-600"
       : "bg-white border-slate-300 text-slate-900 placeholder-slate-400",
     heading: isDark ? "text-slate-50" : "text-slate-900",
-    codeBg: isDark ? "border-slate-800 bg-slate-950" : "border-slate-200 bg-slate-50",
+    codeBg: "glass-code",
     codeText: isDark ? "text-slate-300" : "text-slate-700",
-    rowBorder: isDark ? "border-slate-800" : "border-slate-100",
-    rowHover: isDark ? "hover:bg-slate-800/60" : "hover:bg-slate-50",
-    tableBg: isDark ? "bg-slate-900/40" : "bg-white",
-    tableHeadBg: isDark ? "bg-slate-900/60" : "bg-slate-50",
+    rowBorder: isDark ? "border-white/10" : "border-slate-900/10",
+    rowHover: "hover:bg-white/5",
+    tableBg: "bg-transparent",
+    tableHeadBg: "bg-white/5",
   };
 }
 
@@ -303,7 +303,7 @@ function Header({
             <Shield className={`h-4 w-4 ${isDark ? "text-emerald-400" : "text-emerald-500"}`} />
           </div>
           <span className={`text-lg font-semibold tracking-tight ${t.heading}`}>
-            Secure<span className={isDark ? "text-emerald-400" : "text-emerald-500"}>-VibeCode</span>
+            Vibe<span className={isDark ? "text-emerald-400" : "text-emerald-500"}>Secure</span>
           </span>
         </button>
 
@@ -387,7 +387,7 @@ function HomeScreen({
         </span>
       </h1>
       <p className={`mx-auto mt-4 max-w-lg text-base ${t.subText}`}>
-        Paste a repository URL and Secure-VibeCode will scan it for exposed
+        Paste a repository URL and VibeSecure will scan it for exposed
         secrets, missing access controls, and common logic flaws.
       </p>
 

@@ -14,7 +14,7 @@ export default function RootLayout({
 }) {
   return (
     <html lang="en" className="dark">
-      <body className="min-h-screen bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100 antialiased flex">
+      <body className="min-h-screen text-slate-900 dark:text-slate-100 antialiased flex">
         {/* Left Sidepanel Navigation */}
         <Navbar />
         
