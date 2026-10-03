@@ -90,6 +90,7 @@ def delete_account(session: Session, user: db.User) -> None:
     session.execute(delete(db.OrgInvite).where(db.OrgInvite.invited_by == user.id))
     session.execute(update(db.OrgInvite).where(db.OrgInvite.accepted_by == user.id).values(accepted_by=None))
     session.execute(delete(db.Subscription).where(db.Subscription.user_id == user.id))
+    session.execute(delete(db.ApiKey).where(db.ApiKey.user_id == user.id))
     session.execute(delete(db.GithubConnection).where(db.GithubConnection.user_id == user.id))
     session.flush()
     session.delete(user)
