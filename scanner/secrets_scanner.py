@@ -51,6 +51,20 @@ TEXT_EXTS = {".js", ".ts", ".tsx", ".jsx", ".py", ".env", ".json", ".yml", ".yam
 POTENTIAL_SECRET_STR_RE = re.compile(r"""['"]([^'"\s]{16,128})['"]""")
 
 
+_SECRET_CONTEXT_RE = re.compile(
+   r"(?i)\\b(?:secret|token|api[_-]?key|password|passwd|credential|authorization|auth[_-]?token)\\b"
+)
+_PUBLIC_CONFIG_RE = re.compile(
+   r"(?i)\\b(?:VITE|NEXT_PUBLIC|PUBLIC)[A-Z0-9_]*(?:SUPABASE|FIREBASE|CLIENT|PUBLISHABLE|ANON|PUBLIC)[A-Z0-9_]*\\b"
+)
+
+def _is_public_config_line(line: str) -> bool:
+   return bool(_PUBLIC_CONFIG_RE.search(line))
+
+
+def _is_secret_context_line(line: str) -> bool:
+   return bool(_SECRET_CONTEXT_RE.search(line))
+
 def _masked_snippet(text: str, start: int, end: int) -> tuple[int, str]:
     """Return the finding line and a small source excerpt with the secret removed."""
     line_number = text.count("\n", 0, start) + 1
@@ -136,23 +150,34 @@ def scan_secrets(repo_path: Path) -> list[dict]:
                     "raw_severity": "critical",
                 })
 
-        # 2. Entropy scoring for non-pattern matched high-entropy strings
+        # 2. Entropy scoring for non-pattern matched high-entropy strings.
+        # Require either very high entropy or clear secret-ish context. This
+        # removes most frontend/public/config false positives while still
+        # catching arbitrary high-entropy credentials.
         for match in POTENTIAL_SECRET_STR_RE.finditer(text):
             span = match.span(1)
-            # Avoid duplicate flagging if already covered by regex match
             if any(m_start <= span[0] and span[1] <= m_end for m_start, m_end in matched_spans):
                 continue
 
             candidate = match.group(1)
-            # Skip obvious common placeholder/dummy strings
             if any(candidate.lower().startswith(p) for p in ["example", "placeholder", "your_", "xxxx"]):
                 continue
             if _looks_like_hash_or_id(candidate):
                 continue
 
+            line_start = text.rfind("\\n", 0, match.start()) + 1
+            line_end = text.find("\\n", match.start())
+            if line_end < 0:
+                line_end = len(text)
+            context_line = text[line_start:line_end]
+
+            # Public client/publishable configuration is intentionally exposed
+            # to browsers and should not be treated as a leaked secret.
+            if _is_public_config_line(context_line):
+                continue
+
             entropy = shannon_entropy(candidate)
-            # High entropy threshold for secrets (typically > 4.5 for alphanumeric strings)
-            if entropy >= 4.5 and len(candidate) >= 16:
+            if entropy >= 4.8 or (entropy >= 4.5 and _is_secret_context_line(context_line)):
                 matched_spans.add(span)
                 line, snippet = _masked_snippet(text, match.start(), match.end())
                 findings.append({
@@ -165,7 +190,6 @@ def scan_secrets(repo_path: Path) -> list[dict]:
                     "_match_hash": hashlib.sha256(candidate.encode()).hexdigest(),
                     "raw_severity": "high",
                 })
-
     unique_findings = []
     seen = set()
     for finding in findings:
