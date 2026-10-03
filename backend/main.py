@@ -30,6 +30,7 @@ from backend import accounts, admin, badge, billing, db, deletion, github_oauth,
 from backend.access import Actor, get_scan_or_404, org_role, scan_owner_clause
 from backend.auth import get_actor
 from orchestrator import run_full_scan
+import mcp_remote
 
 ACTIVE_STATUSES = ("queued", "running")
 
@@ -71,17 +72,18 @@ async def lifespan(_app: FastAPI):
         jobs.recover_stale(session)
     _fail_orphaned_jobs()
 
-    stop = threading.Event()
-    worker = threading.Thread(
-        target=jobs.maintenance_loop, args=(stop, jobs.inline()), name="job-maintenance", daemon=True
-    )
-    worker.start()
-    try:
-        yield
-    finally:
-        stop.set()
-        worker.join(timeout=5)
-        jobs.shutdown()
+    async with mcp_remote.mcp.session_manager.run():
+        stop = threading.Event()
+        worker = threading.Thread(
+            target=jobs.maintenance_loop, args=(stop, jobs.inline()), name="job-maintenance", daemon=True
+        )
+        worker.start()
+        try:
+            yield
+        finally:
+            stop.set()
+            worker.join(timeout=5)
+            jobs.shutdown()
 
 
 _init_sentry()
@@ -115,6 +117,7 @@ app.include_router(health.router)
 app.include_router(admin.router)
 app.include_router(billing.router)
 app.include_router(invites.router)
+app.mount("/mcp", mcp_remote.http_app)
 
 
 def _save_findings(session: Session, scan: db.Scan, raw_findings: list[dict]) -> None:

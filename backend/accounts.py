@@ -25,7 +25,7 @@ from sqlalchemy import update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, selectinload
 
-from backend import db, deletion, github_oauth, limits, plans
+from backend import api_keys, db, deletion, github_oauth, limits, plans
 from backend.access import ADMIN_ROLES, Actor, org_role, scan_owner_clause
 from backend.auth import get_actor, require_user
 
@@ -36,6 +36,60 @@ _mutation_limit = Depends(limits.limit_by_user("mutation", "MUTATION_RATE_LIMIT_
 
 
 # --- /me -------------------------------------------------------------------
+class ApiKeyCreate(BaseModel):
+    label: str = Field(default="VibeSecure API key", min_length=1, max_length=80)
+
+class ApiKeyMeta(BaseModel):
+    id: str
+    label: str
+    key_prefix: str
+    created_at: datetime
+    last_used_at: datetime | None = None
+    revoked_at: datetime | None = None
+
+@router.get("/me/api-keys", response_model=list[ApiKeyMeta])
+def list_api_keys(user: db.User = Depends(require_user), session: Session = Depends(db.get_db)):
+    return (
+        session.query(db.ApiKey)
+        .filter(db.ApiKey.user_id == user.id)
+        .order_by(db.ApiKey.created_at.desc())
+        .all()
+    )
+
+@router.post("/me/api-keys", status_code=201)
+def create_api_key(
+    payload: ApiKeyCreate,
+    user: db.User = Depends(require_user),
+    session: Session = Depends(db.get_db),
+):
+    row, raw = api_keys.create_api_key(session, user, payload.label)
+    return {
+        "id": row.id,
+        "label": row.label,
+        "key": raw,
+        "key_prefix": row.key_prefix,
+        "created_at": row.created_at,
+        "warning": "Store this key now. VibeSecure will not show the full key again.",
+    }
+
+@router.delete("/me/api-keys/{key_id}", status_code=204)
+def revoke_api_key(
+    key_id: str,
+    user: db.User = Depends(require_user),
+    session: Session = Depends(db.get_db),
+):
+    row = (
+        session.query(db.ApiKey)
+        .filter(db.ApiKey.id == key_id, db.ApiKey.user_id == user.id)
+        .one_or_none()
+    )
+    if row is None:
+        raise HTTPException(status_code=404, detail="API key not found.")
+    if row.revoked_at is None:
+        row.revoked_at = datetime.now(timezone.utc)
+        session.commit()
+    return Response(status_code=204)
+
 
 
 class MeResponse(BaseModel):
