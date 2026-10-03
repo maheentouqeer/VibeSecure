@@ -316,10 +316,13 @@ class RateEvent(Base):
 def init_db() -> None:
     """Bring the database to the latest Alembic revision.
 
-    A database created earlier by create_all() has tables but no
-    alembic_version table; it is stamped at head instead of re-created.
-    Schema changes go in a new file under alembic/versions/, never by
-    editing an applied migration."""
+    A database created by the current models with create_all() is stamped at
+    head. An older create_all() database is stamped at the revision its schema
+    actually matches, then upgraded through the missing migrations so existing
+    rows are preserved.
+
+    Schema changes go in a new file under alembic/versions/, never by editing
+    an applied migration."""
     from pathlib import Path
 
     from alembic import command
@@ -330,11 +333,45 @@ def init_db() -> None:
     cfg = Config(str(root / "alembic.ini"))
     cfg.set_main_option("script_location", str(root / "alembic"))
 
-    tables = inspect(engine).get_table_names()
+    inspector = inspect(engine)
+    tables = inspector.get_table_names()
     if "scans" in tables and "alembic_version" not in tables:
-        command.stamp(cfg, "head")
+        if set(Base.metadata.tables) <= set(tables):
+            # Created by create_all() from the current models: schema already matches head.
+            command.stamp(cfg, "head")
+        else:
+            # Created by an older create_all(): infer the latest revision it matches,
+            # stamp there, then upgrade through the missing migrations. Stamping head
+            # here would skip missing tables (for example scan_jobs) and crash startup.
+            command.stamp(cfg, _legacy_revision(inspector))
+            command.upgrade(cfg, "head")
     else:
         command.upgrade(cfg, "head")
+
+
+def _legacy_revision(inspector) -> str:
+    """Latest early revision whose schema an old create_all() database contains."""
+    tables = set(inspector.get_table_names())
+
+    def columns(table: str) -> set[str]:
+        return {c["name"] for c in inspector.get_columns(table)} if table in tables else set()
+
+    checks = (
+        ("0001", {"scans", "findings"} <= tables),
+        ("0002", "error" in columns("scans")),
+        ("0003", "scan_runs" in tables),
+        ("0004", "fingerprint" in columns("findings")),
+        ("0005", "commit_sha" in columns("scans")),
+        ("0006", {"users", "organizations", "memberships", "subscriptions"} <= tables
+                 and {"owner_user_id", "org_id"} <= columns("scans")),
+        ("0007", "scan_jobs" in tables),
+    )
+    revision = "0001"
+    for name, present in checks:
+        if not present:
+            break
+        revision = name
+    return revision
 
 
 def get_db():

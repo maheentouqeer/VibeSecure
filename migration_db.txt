@@ -11,10 +11,10 @@ Changing the schema:
   3. Review the generated file in alembic/versions/, then commit it.
   tests/test_migrations.py fails if the models and migrations drift apart.
 
-A database created before Alembic (via create_all) is stamped at the head
-revision on first startup rather than re-created. It must already match the
-current models; a very old database missing columns (e.g. scans.owner_token)
-has to be dropped and recreated.
+A database created before Alembic (via create_all) is detected by its schema.
+If it matches the current models it is stamped at head without touching rows.
+If it is older, startup stamps the latest revision it actually matches and then
+runs the missing migrations to head, preserving existing rows.
 
 Manual commands (run from the repo root, DATABASE_URL set as for the app):
   alembic current

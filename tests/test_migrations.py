@@ -166,3 +166,39 @@ def test_full_chain_downgrades_to_zero_and_back(temp_engine):
     assert set(inspect(temp_engine).get_table_names()) <= {"alembic_version"}
     command.upgrade(_cfg(), "head")
     assert {"scans", "scan_jobs", "github_connections", "subscriptions"} <= set(inspect(temp_engine).get_table_names())
+
+
+
+def _old_deploy_schema(eng):
+    """Exactly what the first production deploy created with create_all(): scans + findings only."""
+    with eng.begin() as conn:
+        conn.execute(text("create table scans (id varchar primary key, target varchar not null, "
+                          "platform varchar not null, status varchar not null, "
+                          "created_at timestamp not null, owner_token varchar not null)"))
+        conn.execute(text("create table findings (id varchar primary key, scan_id varchar not null "
+                          "references scans(id), category varchar not null, label varchar not null, "
+                          "file varchar not null, severity varchar not null, what_it_means text not null, "
+                          "why_it_matters text not null, fix_prompt text not null, status varchar not null)"))
+        conn.execute(text("insert into scans (id, target, platform, status, created_at, owner_token) "
+                          "values ('old1', 'https://x.test', 'generic', 'completed', '2026-01-01', 'tok')"))
+
+
+def test_database_from_the_first_deploy_is_migrated_not_stamped_at_head(temp_engine):
+    """Regression: an old scans+findings database must be upgraded instead of stamped at head."""
+    _old_deploy_schema(temp_engine)
+
+    db.init_db()
+
+    tables = set(inspect(temp_engine).get_table_names())
+    assert {"scan_jobs", "users", "subscriptions", "scan_runs", "org_invites"} <= tables
+    assert _version(temp_engine) == _head()
+    with temp_engine.connect() as conn:
+        assert conn.execute(text("select target from scans where id = 'old1'")).scalar() == "https://x.test"
+
+
+def test_legacy_revision_follows_what_the_database_already_has(temp_engine):
+    _old_deploy_schema(temp_engine)
+    assert db._legacy_revision(inspect(temp_engine)) == "0001"
+    with temp_engine.begin() as conn:
+        conn.execute(text("alter table scans add column error text"))
+    assert db._legacy_revision(inspect(temp_engine)) == "0002"
