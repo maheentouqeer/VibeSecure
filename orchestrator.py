@@ -11,6 +11,7 @@ from scanner.url_safety import assert_public_url
 from scanner.platform_detector import detect_platform, is_supabase_project
 from scanner.secrets_scanner import scan_secrets
 from scanner.code_scanner import run_semgrep
+from scanner.cors_scanner import check_static_cors
 from scanner.supabase_rls_checker import check_rls
 from scanner.live_scanner import scan_live_url
 from agents.triage_agent import triage
@@ -42,6 +43,7 @@ def scan_path(repo_path: Path) -> tuple[list[dict], str]:
     platform = detect_platform(repo_path)
     raw_findings += scan_secrets(repo_path)
     raw_findings += run_semgrep(repo_path)
+    raw_findings += check_static_cors(repo_path)
     if is_supabase_project(repo_path):
         raw_findings += check_rls(repo_path)
     return raw_findings, platform
