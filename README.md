@@ -290,7 +290,7 @@ Backward-compatible aliases are retained for existing client configurations: `sc
 
 ### Local-workspace flow
 
-The important MCP path is local workspace mode. When an AI coding tool invokes `scan_local_workspace`, VibeSecure reads the project directly from the caller's filesystem and returns structured findings, fingerprints, explanations, and ready-to-use fix prompts. No repository clone is required.
+The important MCP path is local workspace mode. When an AI coding tool invokes `scan_local_workspace`, VibeSecure starts the scan in the background and immediately returns a `scan_id`. The client can poll `get_scan_status` and then call `get_findings` when the scan is complete. This avoids short MCP client timeouts while static analysis and AI enrichment run. VibeSecure reads the project directly from the caller's filesystem; no repository clone is required.
 
 ### Current transport/auth boundary
 
