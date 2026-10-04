@@ -33,6 +33,23 @@ def _payload(result):
     return json.loads(result.content[0].text)
 
 
+async def _scan_and_wait(client, tool, args):
+    result = await client.call_tool(tool, args)
+    data = _payload(result)
+    if "scan_id" not in data or data.get("status") not in {"queued", "running"}:
+        return data
+    scan_id = data["scan_id"]
+    for _ in range(100):
+        status_result = await client.call_tool("get_scan_status", {"scan_id": scan_id})
+        status = _payload(status_result)
+        if status["status"] == "completed":
+            return _payload(await client.call_tool("get_findings", {"scan_id": scan_id}))
+        if status["status"] == "failed":
+            raise AssertionError(status.get("error") or "MCP scan failed")
+        await asyncio.sleep(0.01)
+    raise AssertionError("MCP scan did not complete in test timeout")
+
+
 @pytest.fixture()
 def project(tmp_path):
     (tmp_path / "src").mkdir()
@@ -53,7 +70,11 @@ def test_server_exposes_the_mcp_tools():
 
 
 def test_scan_workspace_finds_secret_and_returns_actionable_fields(project):
-    data = _payload(_call("scan_workspace", {"path": str(project)}))
+    async def go():
+        async with create_connected_server_and_client_session(mcp_server.mcp._mcp_server) as client:
+            return await _scan_and_wait(client, "scan_workspace", {"path": str(project)})
+
+    data = asyncio.run(go())
 
     assert data["platform"] == "generic"
     assert data["summary"]["critical"] == 1
@@ -65,12 +86,16 @@ def test_scan_workspace_finds_secret_and_returns_actionable_fields(project):
 
 
 def test_verify_fixes_reports_resolved_and_new_findings(project):
-    first = _payload(_call("scan_workspace", {"path": str(project)}))
-    fingerprints = [f["fingerprint"] for f in first["findings"]]
+    async def go():
+        async with create_connected_server_and_client_session(mcp_server.mcp._mcp_server) as client:
+            first = await _scan_and_wait(client, "scan_workspace", {"path": str(project)})
+            fingerprints = [f["fingerprint"] for f in first["findings"]]
 
-    (project / "src" / "aws.ts").write_text("const key = process.env.AWS_KEY;")
-    (project / "src" / "stripe.ts").write_text("const s = 'sk_test_" + "a1B2c3D4e5F6g7H8i9J0k1L2m3" + "';")
-    after = _payload(_call("verify_fixes", {"path": str(project), "fingerprints": fingerprints}))
+            (project / "src" / "aws.ts").write_text("const key = process.env.AWS_KEY;")
+            (project / "src" / "stripe.ts").write_text("const s = 'sk_test_" + "a1B2c3D4e5F6g7H8i9J0k1L2m3" + "';")
+            return await _scan_and_wait(client, "verify_fixes", {"path": str(project), "fingerprints": fingerprints}), fingerprints
+
+    after, fingerprints = asyncio.run(go())
 
     assert after["resolved"] == fingerprints
     assert after["still_present"] == []
@@ -78,10 +103,14 @@ def test_verify_fixes_reports_resolved_and_new_findings(project):
 
 
 def test_verify_fixes_reports_still_present_when_nothing_changed(project):
-    first = _payload(_call("scan_workspace", {"path": str(project)}))
-    fingerprints = [f["fingerprint"] for f in first["findings"]]
+    async def go():
+        async with create_connected_server_and_client_session(mcp_server.mcp._mcp_server) as client:
+            first = await _scan_and_wait(client, "scan_workspace", {"path": str(project)})
+            fingerprints = [f["fingerprint"] for f in first["findings"]]
+            after = await _scan_and_wait(client, "verify_fixes", {"path": str(project), "fingerprints": fingerprints})
+            return after, fingerprints
 
-    after = _payload(_call("verify_fixes", {"path": str(project), "fingerprints": fingerprints}))
+    after, fingerprints = asyncio.run(go())
     assert after["still_present"] == fingerprints and after["resolved"] == []
 
 
