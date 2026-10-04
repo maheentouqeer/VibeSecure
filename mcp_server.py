@@ -23,6 +23,7 @@ concern and should be added when the SaaS API-key table/metering layer exists.
 
 from __future__ import annotations
 
+import asyncio
 import time
 import uuid
 from pathlib import Path
@@ -40,6 +41,7 @@ mcp = FastMCP("VibeSecure")
 
 MAX_FINDINGS = 50
 MAX_STORED_SCANS = 50
+_SCAN_TASKS: dict[str, asyncio.Task] = {}
 SEVERITY_RANK = {"critical": 0, "high": 1, "medium": 2, "low": 3}
 
 # Local process cache. The SaaS backend remains the source of truth for web/API
@@ -128,6 +130,37 @@ def _scan_local(folder: Path) -> tuple[list[dict], str]:
     return enrich(raw, platform), platform
 
 
+async def _run_local_scan(scan_id: str, folder: Path) -> None:
+    record = _SCAN_STORE[scan_id]
+    record["status"] = "running"
+    try:
+        findings, platform = await anyio.to_thread.run_sync(_scan_local, folder)
+        record["findings"] = findings
+        record["platform"] = platform
+        record["status"] = "completed"
+    except Exception as exc:
+        record["status"] = "failed"
+        record["error"] = str(exc)
+    finally:
+        _SCAN_TASKS.pop(scan_id, None)
+
+
+def _start_local_scan(folder: Path) -> str:
+    scan_id = str(uuid.uuid4())
+    _SCAN_STORE[scan_id] = {
+        "scan_id": scan_id,
+        "target": str(folder),
+        "target_type": "local_workspace",
+        "platform": "pending",
+        "findings": [],
+        "commit": None,
+        "status": "queued",
+        "created_at": time.time(),
+    }
+    _SCAN_TASKS[scan_id] = asyncio.create_task(_run_local_scan(scan_id, folder))
+    return scan_id
+
+
 def _scan_public_repo(repo_url: str) -> tuple[list[dict], str, str | None]:
     result = run_full_scan(repo_url)
     return result["findings"], result["platform"], result.get("commit_sha")
@@ -171,16 +204,21 @@ async def scan_repository(repo_url: str) -> dict:
 
 @mcp.tool()
 async def scan_local_workspace(path: str = ".") -> dict:
-    """Scan the caller's local project directory without cloning or uploading it."""
+    """Start a non-blocking scan of the caller's local project directory.
+
+    The scan runs in the background so MCP clients with short tool-call
+    timeouts do not have to wait for static analysis and AI enrichment.
+    Use get_scan_status, then get_findings when status becomes completed.
+    """
     folder = _resolve_dir(path)
-    findings, platform = await anyio.to_thread.run_sync(_scan_local, folder)
-    scan_id = _remember_scan(
-        target=str(folder),
-        target_type="local_workspace",
-        platform=platform,
-        findings=findings,
-    )
-    return _result_payload(_SCAN_STORE[scan_id])
+    scan_id = _start_local_scan(folder)
+    return {
+        "scan_id": scan_id,
+        "target": str(folder),
+        "target_type": "local_workspace",
+        "status": "queued",
+        "message": "Scan started in the background. Call get_scan_status, then get_findings when status is completed.",
+    }
 
 
 @mcp.tool()
@@ -208,6 +246,7 @@ async def get_scan_status(scan_id: str) -> dict:
         "target_type": record["target_type"],
         "platform": record["platform"],
         "total": len(record["findings"]),
+        "error": record.get("error"),
     }
 
 
@@ -217,6 +256,16 @@ async def get_findings(scan_id: str) -> dict:
     record = _SCAN_STORE.get(scan_id)
     if not record:
         raise ValueError(f"Unknown MCP scan_id: {scan_id}")
+    if record["status"] != "completed":
+        return {
+            "scan_id": scan_id,
+            "target": record["target"],
+            "target_type": record["target_type"],
+            "platform": record["platform"],
+            "status": record["status"],
+            "message": "Findings are not ready yet. Call get_scan_status and retry when status is completed.",
+            "error": record.get("error"),
+        }
     return _result_payload(record)
 
 
