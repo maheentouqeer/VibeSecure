@@ -333,15 +333,27 @@ async def scan_url(target: str) -> dict:
 
 @mcp.tool()
 async def verify_fixes(path: str, fingerprints: list[str]) -> dict:
-    """Compatibility helper that re-scans a local workspace and compares fingerprints."""
-    result = await scan_local_workspace(path)
-    current = {item["fingerprint"] for item in result["findings"]}
+    """Re-scan a local workspace and compare the requested finding fingerprints.
+
+    This compatibility tool preserves its historical synchronous result shape,
+    while the primary scan_local_workspace tool remains non-blocking for clients
+    with short tool-call timeouts.
+    """
+    folder = _resolve_dir(path)
+    scan_id = _start_local_scan(folder)
+    task = _SCAN_TASKS[scan_id]
+    await task
+    record = _SCAN_STORE[scan_id]
+    if record["status"] != "completed":
+        raise RuntimeError(record.get("error") or "MCP scan failed")
+    findings = _present(record["findings"])["findings"]
+    current = {item["fingerprint"] for item in findings}
     wanted = set(fingerprints)
     return {
         "resolved": sorted(wanted - current),
         "still_present": sorted(wanted & current),
-        "new_findings": [item for item in result["findings"] if item["fingerprint"] not in wanted],
-        "scan_id": result["scan_id"],
+        "new_findings": [item for item in findings if item["fingerprint"] not in wanted],
+        "scan_id": scan_id,
     }
 
 
