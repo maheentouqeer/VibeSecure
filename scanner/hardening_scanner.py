@@ -22,7 +22,7 @@ _PATTERNS = (
     (
         "sql_injection",
         "Potential SQL string interpolation",
-        re.compile(r"""(?:query|execute|executemany)\s*\(\s*(?:f["']|\\x60[^\\x60]*\$\{|\\w+\s*\+|["'][^"']*["']\s*\+)""", re.IGNORECASE),
+        re.compile(r"""(?:query|execute|executemany)\s*\(\s*(?:f["']|`[^`]*\$\{|\w+\s*\+|["'][^"']*["']\s*\+)""", re.IGNORECASE),
         "high",
         "A database operation appears to build SQL from interpolated or concatenated strings.",
     ),
