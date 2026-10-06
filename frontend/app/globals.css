@@ -352,6 +352,7 @@ button:disabled {
 
 .score-ring {
   --score-ring: #34d399;
+  --risk-progress: 0%;
   display: flex;
   height: 110px;
   width: 110px;
@@ -361,7 +362,7 @@ button:disabled {
   border-radius: 50%;
   background:
     radial-gradient(circle, #090d13 58%, transparent 59%),
-    conic-gradient(var(--score-ring) 0 72%, rgba(255, 255, 255, 0.065) 72% 100%);
+    conic-gradient(var(--score-ring) 0 var(--risk-progress), rgba(255, 255, 255, 0.065) var(--risk-progress) 100%);
   box-shadow: 0 0 48px color-mix(in srgb, var(--score-ring) 13%, transparent);
 }
 
