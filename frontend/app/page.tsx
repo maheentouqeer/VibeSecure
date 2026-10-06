@@ -25,6 +25,7 @@ import {
   X,
   XCircle,
   Zap,
+  type LucideIcon,
 } from "lucide-react";
 
 import {
@@ -150,14 +151,14 @@ function HomeScreen({
           </p>
 
           <div className="mt-8 grid gap-2 sm:grid-cols-2 lg:grid-cols-5">
-            {[
-              ["01", "SCAN", ScanSearch],
-              ["02", "ATTACK PATH", Network],
-              ["03", "FRAUD IMPACT", ShieldAlert],
-              ["04", "FIX", Zap],
-              ["05", "VERIFY", ShieldCheck],
-            ].map(([step, label, Icon]) => (
-              <div key={String(label)} className="workflow-step">
+            {([
+              { step: "01", label: "SCAN", Icon: ScanSearch },
+              { step: "02", label: "ATTACK PATH", Icon: Network },
+              { step: "03", label: "FRAUD IMPACT", Icon: ShieldAlert },
+              { step: "04", label: "FIX", Icon: Zap },
+              { step: "05", label: "VERIFY", Icon: ShieldCheck },
+            ] as { step: string; label: string; Icon: LucideIcon }[]).map(({ step, label, Icon }) => (
+              <div key={label} className="workflow-step">
                 <span>{step}</span>
                 <Icon className="h-3.5 w-3.5" />
                 <strong>{label}</strong>
