@@ -87,3 +87,22 @@ def test_empty_summary_is_safe():
     summary = summarize([])
     assert summary["overall_risk_score"] == 0
     assert summary["top_finding"] is None
+
+def test_resolved_findings_do_not_keep_current_risk_open():
+    context = build_context(
+        [
+            {
+                "id": "old",
+                "category": "missing_access_control",
+                "label": "Authorization missing",
+                "file": "api/orders.ts",
+                "severity": "critical",
+                "status": "resolved",
+                "fix_prompt": "Enforce server-side ownership checks.",
+            }
+        ]
+    )
+    assert context["finding_count"] == 1
+    assert context["open_high_critical"] == 0
+    assert context["verification"]["passed"] is True
+    assert context["fraud_findings"] == []
