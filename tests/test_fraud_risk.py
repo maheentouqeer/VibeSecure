@@ -78,7 +78,9 @@ def test_hardening_scanner_finds_high_signal_client_secret(tmp_path: Path):
     source.write_text('const key = import.meta.env.VITE_STRIPE_SECRET_KEY = "x";\\n')
     findings = scan_hardening(tmp_path)
     assert any(item["category"] == "public_secret_env" for item in findings)
-    assert any(item["severity"] if "severity" in item else True for item in findings)
+    secret = next(item for item in findings if item["category"] == "public_secret_env")
+    assert secret["raw_severity"] == "critical"
+    assert secret["line"] == 1
 
 
 def test_empty_summary_is_safe():
