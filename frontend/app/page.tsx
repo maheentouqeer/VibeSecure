@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode, type CSSProperties } from "react";
 import {
   AlertTriangle,
   ArrowDown,
@@ -11,7 +11,6 @@ import {
   CheckCircle2,
   Clipboard,
   Code2,
-  GitBranch,
   History,
   Loader2,
   LockKeyhole,
@@ -69,12 +68,6 @@ function severityClass(severity: string) {
   return "severity-low";
 }
 
-function shortLabel(value: string) {
-  if (!value) return "—";
-  if (value.length <= 72) return value;
-  return value.slice(0, 69) + "...";
-}
-
 function scoreLabel(score: number) {
   return String(Math.max(0, Math.min(100, Math.round(score)))).padStart(2, "0");
 }
@@ -105,7 +98,7 @@ function StatCard({
   eyebrow: string;
   value: string;
   label: string;
-  icon: React.ReactNode;
+  icon: ReactNode;
 }) {
   return (
     <div className="glass-panel p-4">
@@ -368,7 +361,7 @@ function RiskSummary({
     <div className="glass-panel p-5 md:p-6">
       <div className="flex flex-col gap-5 md:flex-row md:items-center md:justify-between">
         <div className="flex items-center gap-4">
-          <div className={"score-ring " + bandClass(context.overall_risk_band)}>
+          <div className={"score-ring " + bandClass(context.overall_risk_band)} style={{ "--risk-progress": Math.max(0, Math.min(100, context.overall_risk_score)) + "%" } as CSSProperties}>
             <div className="score-ring-inner">
               <span className="text-2xl font-semibold text-white">{scoreLabel(context.overall_risk_score)}</span>
               <span className="text-[9px] uppercase tracking-[0.16em] text-slate-500">risk</span>
