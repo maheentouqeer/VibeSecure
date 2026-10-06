@@ -1,124 +1,51 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import Link from "next/link";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
-  Shield,
-  ShieldCheck,
-  Sun,
-  Moon,
-  Loader2,
-  CheckCircle2,
-  XCircle,
-  Circle,
-  ChevronDown,
-  ChevronUp,
-  Copy,
-  Check,
-  History,
-  ArrowLeft,
-  Sparkles,
-  X,
-  RotateCcw,
-  Award,
   AlertTriangle,
+  ArrowDown,
+  ArrowLeft,
+  ArrowRight,
+  Check,
+  CheckCircle2,
+  Clipboard,
+  Code2,
+  GitBranch,
+  History,
+  Loader2,
+  LockKeyhole,
+  Network,
+  RefreshCw,
+  ScanSearch,
+  Shield,
+  ShieldAlert,
+  ShieldCheck,
+  Terminal,
+  TriangleAlert,
+  X,
+  XCircle,
+  Zap,
 } from "lucide-react";
 
-import { API_URL, createScan, rescanScan, listScans, ApiError, type ApiScan, type ApiFinding } from "@/lib/api";
-import Link from 'next/link';
-// ---------------------------------------------------------------------------
-// Types
-// ---------------------------------------------------------------------------
-type Screen = "home" | "scanning" | "results" | "badge" | "history";
-type Platform = "lovable/supabase" | "bolt" | "replit" | "generic";
-type Severity = "critical" | "high" | "medium" | "low";
-type ScanStatus = "scanning" | "pass" | "fail";
+import {
+  ApiError,
+  createScan,
+  getSecurityContext,
+  listScans,
+  rescanScan,
+  type ApiScan,
+  type AttackPath,
+  type FraudRiskFinding,
+  type HardeningItem,
+  type SecurityContext,
+} from "@/lib/api";
 
-interface Finding {
-  id: string;
-  severity: Severity;
-  title: string;
-  whatItMeans: string;
-  whyItMatters: string;
-  fixPrompt: string;
-  resolved: boolean;
-}
+type Screen = "home" | "scanning" | "results" | "history";
 
-interface ScanResult {
-  id: string;
-  repoUrl: string;
-  platform: Platform;
-  date: string; // ISO
-  status: ScanStatus;
-  findings: Finding[];
-}
-
-// ---------------------------------------------------------------------------
-// Mapping: backend shape (snake_case, id-based status) -> frontend shape
-// ---------------------------------------------------------------------------
-function mapPlatform(apiPlatform: string): Platform {
-  if (apiPlatform === "lovable_supabase") return "lovable/supabase";
-  if (apiPlatform === "bolt_v0") return "bolt";
-  if (apiPlatform === "replit") return "replit";
-  return "generic";
-}
-
-function mapFinding(f: ApiFinding): Finding {
-  return {
-    id: f.id,
-    severity: f.severity,
-    title: f.label,
-    whatItMeans: f.what_it_means,
-    whyItMatters: f.why_it_matters,
-    fixPrompt: f.fix_prompt,
-    resolved: f.status === "resolved",
-  };
-}
-
-function mapScan(s: ApiScan): ScanResult {
-  const findings = s.findings.map(mapFinding);
-  const openCriticalHigh = findings.filter(
-    (f) => !f.resolved && (f.severity === "critical" || f.severity === "high")
-  ).length;
-  return {
-    id: s.id,
-    repoUrl: s.target,
-    platform: mapPlatform(s.platform),
-    date: s.created_at,
-    status: openCriticalHigh === 0 ? "pass" : "fail",
-    findings,
-  };
-}
-
-// ---------------------------------------------------------------------------
-// Constants / mock data helpers
-// ---------------------------------------------------------------------------
 const DEMO_REPO_URL = "https://github.com/maheentouqeer/test-vibesecure";
 
-const SCAN_STEPS = [
-  { id: "clone", label: "Cloning repository..." },
-  { id: "checks", label: "Running security checks..." },
-  { id: "analyze", label: "Analyzing findings..." },
-] as const;
-
-const SEVERITY_ORDER: Severity[] = ["critical", "high", "medium", "low"];
-
-let idCounter = 0;
-function makeId(): string {
-  idCounter += 1;
-  return `id-${idCounter}-${Date.now().toString(36)}`;
-}
-
-function detectPlatform(url: string): Platform {
-  const lower = url.toLowerCase();
-  if (lower.includes("supabase") || lower.includes("lovable")) return "lovable/supabase";
-  if (lower.includes("bolt.new") || lower.includes("bolt-")) return "bolt";
-  if (lower.includes("replit")) return "replit";
-  return "generic";
-}
-
-
-
-function formatDate(iso: string): string {
+function formatDate(iso: string) {
   return new Date(iso).toLocaleString(undefined, {
     month: "short",
     day: "numeric",
@@ -128,1099 +55,890 @@ function formatDate(iso: string): string {
   });
 }
 
-// ---------------------------------------------------------------------------
-// Theming helper — explicit tokens instead of Tailwind's `dark:` variant.
-// This guarantees the toggle works with zero tailwind.config changes.
-// ---------------------------------------------------------------------------
-function getTheme(isDark: boolean) {
-  return {
-    pageBg: "bg-transparent",
-    pageText: isDark ? "text-slate-50" : "text-slate-900",
-    headerBorder: "",
-    headerBg: "glass-header",
-    navLink: isDark ? "text-slate-400 hover:text-slate-100" : "text-slate-500 hover:text-slate-900",
-    navLinkActive: isDark ? "text-slate-100" : "text-slate-900",
-    ghostBtn: isDark
-      ? "border-slate-700 text-slate-300 hover:border-emerald-500/50 hover:text-emerald-400"
-      : "border-slate-300 text-slate-700 hover:border-emerald-500/50 hover:text-emerald-600",
-    cardBg: "glass-panel",
-    cardShadow: "shadow-none",
-    subText: isDark ? "text-slate-400" : "text-slate-500",
-    mutedText: isDark ? "text-slate-500" : "text-slate-400",
-    label: isDark ? "text-slate-300" : "text-slate-700",
-    inputBg: isDark
-      ? "bg-slate-950/70 border-slate-700 text-slate-100 placeholder-slate-600"
-      : "bg-white border-slate-300 text-slate-900 placeholder-slate-400",
-    heading: isDark ? "text-slate-50" : "text-slate-900",
-    codeBg: "glass-code",
-    codeText: isDark ? "text-slate-300" : "text-slate-700",
-    rowBorder: isDark ? "border-white/10" : "border-slate-900/10",
-    rowHover: "hover:bg-white/5",
-    tableBg: "bg-transparent",
-    tableHeadBg: "bg-white/5",
-  };
+function bandClass(band: string) {
+  if (band === "critical") return "risk-critical";
+  if (band === "high") return "risk-high";
+  if (band === "medium") return "risk-medium";
+  return "risk-low";
 }
 
-function severityStyles(sev: Severity, isDark: boolean) {
-  const map: Record<Severity, { light: string; dark: string }> = {
-    critical: {
-      light: "bg-red-100 text-red-700 border-red-300",
-      dark: "bg-red-500/10 text-red-400 border-red-500/30",
-    },
-    high: {
-      light: "bg-orange-100 text-orange-700 border-orange-300",
-      dark: "bg-orange-500/10 text-orange-400 border-orange-500/30",
-    },
-    medium: {
-      light: "bg-amber-100 text-amber-700 border-amber-300",
-      dark: "bg-amber-500/10 text-amber-400 border-amber-500/30",
-    },
-    low: {
-      light: "bg-blue-100 text-blue-700 border-blue-300",
-      dark: "bg-blue-500/10 text-blue-400 border-blue-500/30",
-    },
-  };
-  return isDark ? map[sev].dark : map[sev].light;
+function severityClass(severity: string) {
+  if (severity === "critical") return "severity-critical";
+  if (severity === "high") return "severity-high";
+  if (severity === "medium") return "severity-medium";
+  return "severity-low";
 }
 
-function platformStyles(platform: Platform, isDark: boolean) {
-  const map: Record<Platform, { light: string; dark: string }> = {
-    "lovable/supabase": {
-      light: "bg-emerald-100 text-emerald-700 border-emerald-300",
-      dark: "bg-emerald-500/10 text-emerald-400 border-emerald-500/30",
-    },
-    bolt: {
-      light: "bg-yellow-100 text-yellow-700 border-yellow-300",
-      dark: "bg-yellow-500/10 text-yellow-400 border-yellow-500/30",
-    },
-    replit: {
-      light: "bg-orange-100 text-orange-700 border-orange-300",
-      dark: "bg-orange-500/10 text-orange-400 border-orange-500/30",
-    },
-    generic: {
-      light: "bg-slate-200 text-slate-700 border-slate-300",
-      dark: "bg-slate-500/10 text-slate-300 border-slate-500/30",
-    },
-  };
-  return isDark ? map[platform].dark : map[platform].light;
+function shortLabel(value: string) {
+  if (!value) return "—";
+  if (value.length <= 72) return value;
+  return value.slice(0, 69) + "...";
 }
 
-// ---------------------------------------------------------------------------
-// Small shared UI pieces (top-level, stable identities)
-// ---------------------------------------------------------------------------
-function PlatformPill({ platform, isDark }: { platform: Platform; isDark: boolean }) {
+function scoreLabel(score: number) {
+  return String(Math.max(0, Math.min(100, Math.round(score)))).padStart(2, "0");
+}
+
+function RiskBadge({ band }: { band: string }) {
   return (
-    <span
-      className={`inline-flex items-center rounded-full border px-2.5 py-0.5 text-xs font-medium ${platformStyles(
-        platform,
-        isDark
-      )}`}
-    >
-      {platform}
+    <span className={"inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.16em] " + bandClass(band)}>
+      <span className="h-1.5 w-1.5 rounded-full bg-current" />
+      {band} risk
     </span>
   );
 }
 
-function SeverityBadge({ severity, isDark }: { severity: Severity; isDark: boolean }) {
+function SeverityBadge({ severity }: { severity: string }) {
   return (
-    <span
-      className={`inline-flex items-center rounded-full border px-2 py-0.5 text-[11px] font-semibold uppercase tracking-wide ${severityStyles(
-        severity,
-        isDark
-      )}`}
-    >
+    <span className={"inline-flex items-center rounded-full border px-2 py-1 text-[10px] font-bold uppercase tracking-[0.15em] " + severityClass(severity)}>
       {severity}
     </span>
   );
 }
 
-function StatusPill({ status, isDark }: { status: ScanStatus; isDark: boolean }) {
-  if (status === "scanning") {
-    return (
-      <span
-        className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-0.5 text-xs font-medium ${
-          isDark
-            ? "border-slate-700 bg-slate-800 text-slate-300"
-            : "border-slate-300 bg-slate-100 text-slate-600"
-        }`}
-      >
-        <Loader2 className="h-3 w-3 animate-spin" /> Scanning
-      </span>
-    );
-  }
-  if (status === "pass") {
-    return (
-      <span
-        className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-0.5 text-xs font-medium ${
-          isDark
-            ? "border-emerald-500/30 bg-emerald-500/10 text-emerald-400"
-            : "border-emerald-300 bg-emerald-100 text-emerald-700"
-        }`}
-      >
-        <CheckCircle2 className="h-3 w-3" /> Pass
-      </span>
-    );
-  }
-  return (
-    <span
-      className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-0.5 text-xs font-medium ${
-        isDark ? "border-red-500/30 bg-red-500/10 text-red-400" : "border-red-300 bg-red-100 text-red-700"
-      }`}
-    >
-      <XCircle className="h-3 w-3" /> Fail
-    </span>
-  );
-}
-
-// ---------------------------------------------------------------------------
-// Header
-// ---------------------------------------------------------------------------
-function Header({
-  isDark,
-  toggleTheme,
-  isSignedIn,
-  toggleSignIn,
-  screen,
-  goHome,
-  goHistory,
-  showHistoryLink,
+function StatCard({
+  eyebrow,
+  value,
+  label,
+  icon,
 }: {
-  isDark: boolean;
-  toggleTheme: () => void;
-  isSignedIn: boolean;
-  toggleSignIn: () => void;
-  screen: Screen;
-  goHome: () => void;
-  goHistory: () => void;
-  showHistoryLink: boolean;
+  eyebrow: string;
+  value: string;
+  label: string;
+  icon: React.ReactNode;
 }) {
-  const t = getTheme(isDark);
   return (
-    <header className={`sticky top-0 z-20 border-b backdrop-blur-md ${t.headerBorder} ${t.headerBg}`}>
-      <div className="mx-auto flex max-w-6xl items-center justify-between px-6 py-4">
-        <button onClick={goHome} className="flex items-center gap-2" aria-label="Go to home screen">
-          <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-emerald-500/10 ring-1 ring-emerald-400/40">
-            <Shield className={`h-4 w-4 ${isDark ? "text-emerald-400" : "text-emerald-500"}`} />
-          </div>
-          <span className={`text-lg font-semibold tracking-tight ${t.heading}`}>
-            Vibe<span className={isDark ? "text-emerald-400" : "text-emerald-500"}>Secure</span>
-          </span>
-        </button>
-
-        <nav className="flex items-center gap-4 text-sm">
-
-          {showHistoryLink && (
-            <button
-              onClick={goHistory}
-              className={`hidden sm:inline transition ${
-                screen === "history" ? `font-semibold ${t.navLinkActive}` : t.navLink
-              }`}
-            >
-              Past scans
-            </button>
-          )}
-
-          <button
-            type="button"
-            onClick={toggleTheme}
-            aria-label="Toggle color theme"
-            className={`flex h-9 w-9 items-center justify-center rounded-lg border transition ${t.ghostBtn}`}
-          >
-            {isDark ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
-          </button>
-
-          <Link
-  href="/login"
-  onClick={toggleSignIn}
-  className={`inline-flex items-center justify-center rounded-md border px-3 py-1.5 transition ${t.ghostBtn}`}
->
-  {isSignedIn ? "Sign out" : "Sign in"}
-</Link>
-        </nav>
+    <div className="glass-panel p-4">
+      <div className="flex items-center justify-between">
+        <span className="mono-label">{eyebrow}</span>
+        <span className="icon-chip">{icon}</span>
       </div>
-    </header>
+      <div className="mt-4 text-2xl font-semibold tracking-tight">{value}</div>
+      <div className="mt-1 text-xs text-slate-500">{label}</div>
+    </div>
   );
 }
 
-// ---------------------------------------------------------------------------
-// Screen 1: Home
-// ---------------------------------------------------------------------------
 function HomeScreen({
-  isDark,
-  urlInput,
-  setUrlInput,
+  value,
+  onChange,
   onScan,
   onDemo,
-  showHistoryLink,
-  goHistory,
   error,
 }: {
-  isDark: boolean;
-  urlInput: string;
-  setUrlInput: (v: string) => void;
+  value: string;
+  onChange: (value: string) => void;
   onScan: () => void;
   onDemo: () => void;
-  showHistoryLink: boolean;
-  goHistory: () => void;
-  error?: string | null;
+  error: string | null;
 }) {
-  const t = getTheme(isDark);
   return (
-    <main className="mx-auto max-w-2xl px-6 pb-24 pt-20 text-center">
-      <span
-        className={`inline-flex items-center gap-2 rounded-full border px-3 py-1 text-xs font-medium ${
-          isDark ? "border-slate-800 bg-slate-900/60 text-emerald-400" : "border-slate-200 bg-slate-50 text-emerald-600"
-        }`}
-      >
-        <Sparkles className="h-3 w-3" />
-        AI-powered vulnerability scanning for vibe-coded apps
-      </span>
+    <div className="mx-auto max-w-6xl px-5 pb-20 pt-8 md:px-8 md:pt-12">
+      <section className="relative overflow-hidden rounded-[28px] border border-emerald-400/15 bg-slate-950/45 px-6 py-10 shadow-[0_30px_100px_rgba(0,0,0,0.26)] md:px-12 md:py-14">
+        <div className="absolute inset-0 security-grid opacity-50" />
+        <div className="absolute -right-28 -top-24 h-72 w-72 rounded-full bg-cyan-400/10 blur-3xl" />
+        <div className="absolute -left-24 bottom-0 h-72 w-72 rounded-full bg-emerald-400/10 blur-3xl" />
 
-      <h1 className={`mt-6 text-4xl font-bold tracking-tight sm:text-5xl ${t.heading}`}>
-        Ship fast. Stay{" "}
-        <span
-          className={`bg-clip-text text-transparent bg-linear-to-r ${
-            isDark ? "from-emerald-400 to-cyan-400" : "from-emerald-500 to-cyan-500"
-          }`}
-        >
-          secure.
-        </span>
-      </h1>
-      <p className={`mx-auto mt-4 max-w-lg text-base ${t.subText}`}>
-        Paste a repository URL and VibeSecure will scan it for exposed
-        secrets, missing access controls, and common logic flaws.
-      </p>
+        <div className="relative max-w-4xl">
+          <div className="inline-flex items-center gap-2 rounded-full border border-emerald-400/20 bg-emerald-400/5 px-3 py-1.5 text-[10px] font-bold uppercase tracking-[0.18em] text-emerald-300">
+            <ShieldCheck className="h-3.5 w-3.5" />
+            VibeSecure 2.0 · ForgeHacks build
+          </div>
 
-      {error && (
-        <div
-          className={`mx-auto mt-6 flex max-w-md items-start gap-2 rounded-lg border px-4 py-3 text-left text-sm ${
-            isDark ? "border-red-500/30 bg-red-500/10 text-red-300" : "border-red-300 bg-red-50 text-red-700"
-          }`}
-        >
-          <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
-          <span>{error}</span>
+          <h1 className="mt-6 max-w-4xl text-4xl font-semibold tracking-[-0.04em] text-white md:text-6xl">
+            Security for the
+            <span className="text-gradient"> AI-native software era.</span>
+          </h1>
+
+          <p className="mt-5 max-w-2xl text-sm leading-7 text-slate-400 md:text-base">
+            VibeSecure does more than list vulnerabilities. It turns scanner evidence into an
+            understandable attack path, explains the fraud or impersonation impact, generates a fix,
+            and lets you re-scan to verify the path is closed.
+          </p>
+
+          <div className="mt-8 grid gap-2 sm:grid-cols-2 lg:grid-cols-5">
+            {[
+              ["01", "SCAN", ScanSearch],
+              ["02", "ATTACK PATH", Network],
+              ["03", "FRAUD IMPACT", ShieldAlert],
+              ["04", "FIX", Zap],
+              ["05", "VERIFY", ShieldCheck],
+            ].map(([step, label, Icon]) => (
+              <div key={String(label)} className="workflow-step">
+                <span>{step}</span>
+                <Icon className="h-3.5 w-3.5" />
+                <strong>{label}</strong>
+              </div>
+            ))}
+          </div>
         </div>
-      )}
+      </section>
 
-      <div className={`mt-10 rounded-2xl border p-6 text-left shadow-xl sm:p-8 ${t.cardBg} ${t.cardShadow}`}>
-        <label htmlFor="repo-url" className={`mb-2 block text-sm font-medium ${t.label}`}>
-          Repository URL
-        </label>
-        <input
-          id="repo-url"
-          type="text"
-          value={urlInput}
-          onChange={(e) => setUrlInput(e.target.value)}
-          placeholder="https://github.com/owner/repo"
-          className={`w-full rounded-lg border px-4 py-3 text-sm outline-none transition focus:border-emerald-500/60 focus:ring-2 focus:ring-emerald-500/20 ${t.inputBg}`}
-        />
-        <p className={`mt-2 text-xs ${t.mutedText}`}>
-          Works with GitHub repos exported from Lovable, Bolt, Replit, or any
-          generic codebase.
-        </p>
+      <section className="mt-6 grid gap-6 lg:grid-cols-[1.35fr_0.65fr]">
+        <div className="glass-panel p-5 md:p-6">
+          <div className="flex items-center justify-between gap-4">
+            <div>
+              <div className="mono-label">START A SECURITY REVIEW</div>
+              <h2 className="mt-2 text-xl font-semibold tracking-tight text-white">Scan a repository</h2>
+            </div>
+            <div className="hidden rounded-full border border-white/10 px-3 py-1 text-[10px] font-semibold text-slate-500 md:block">
+              GitHub · public repos
+            </div>
+          </div>
 
-        <div className="mt-6 flex flex-col gap-3 sm:flex-row">
-          <button
-            onClick={onScan}
-            disabled={!urlInput.trim()}
-            className={`flex-1 rounded-lg px-4 py-3 text-sm font-semibold shadow-lg shadow-emerald-500/20 transition disabled:cursor-not-allowed disabled:opacity-50 ${
-              isDark ? "bg-emerald-500 text-slate-950 hover:bg-emerald-400" : "bg-emerald-500 text-white hover:bg-emerald-600"
-            }`}
-          >
-            Scan now
-          </button>
-          <button
-            onClick={onDemo}
-            className={`flex-1 rounded-lg border px-4 py-3 text-sm font-semibold transition ${t.ghostBtn}`}
-          >
-            Try a demo repo
-          </button>
+          <label htmlFor="repo-url" className="mt-5 block text-xs font-semibold uppercase tracking-[0.13em] text-slate-400">
+            Repository URL
+          </label>
+          <div className="mt-2 flex flex-col gap-3 md:flex-row">
+            <input
+              id="repo-url"
+              value={value}
+              onChange={(event) => onChange(event.target.value)}
+              placeholder="https://github.com/owner/repository"
+              className="glass-input min-w-0 flex-1 rounded-xl px-4 py-3.5 text-sm text-white outline-none transition focus:border-emerald-400/50"
+            />
+            <button
+              onClick={onScan}
+              disabled={!value.trim()}
+              className="primary-action"
+            >
+              <ScanSearch className="h-4 w-4" />
+              Start scan
+            </button>
+          </div>
+
+          {error && (
+            <div className="mt-4 flex items-start gap-2 rounded-xl border border-red-500/25 bg-red-500/10 px-4 py-3 text-sm text-red-200">
+              <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
+              <span>{error}</span>
+            </div>
+          )}
+
+          <div className="mt-5 flex flex-wrap items-center gap-3 text-xs text-slate-500">
+            <button onClick={onDemo} className="secondary-action">
+              <Terminal className="h-3.5 w-3.5" />
+              Try demo repository
+            </button>
+            <span>Source code is scanned by VibeSecure; only masked finding context is sent to Gemini when configured.</span>
+          </div>
         </div>
 
-        {showHistoryLink && (
-          <button
-            onClick={goHistory}
-            className={`mt-4 inline-flex items-center gap-1.5 text-sm transition ${
-              isDark ? "text-slate-400 hover:text-emerald-400" : "text-slate-500 hover:text-emerald-600"
-            }`}
-          >
-            <History className="h-3.5 w-3.5" />
-            Past scans
-          </button>
-        )}
-      </div>
-    </main>
+        <div className="glass-panel p-5 md:p-6">
+          <div className="mono-label">WHY THIS IS DIFFERENT</div>
+          <div className="mt-4 space-y-3">
+            {[
+              ["Finding", "Missing authorization"],
+              ["Attack path", "Attacker → victim data → account action"],
+              ["Fraud impact", "Impersonation / transaction abuse"],
+              ["Verification", "Re-scan → path closed"],
+            ].map(([key, value]) => (
+              <div key={key} className="rounded-xl border border-white/8 bg-white/[0.025] p-3.5">
+                <div className="text-[10px] font-bold uppercase tracking-[0.15em] text-slate-500">{key}</div>
+                <div className="mt-1.5 text-sm font-medium text-slate-200">{value}</div>
+              </div>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      <section className="mt-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        <StatCard eyebrow="ENGINE" value="Scanner + reasoning" label="Deterministic evidence first" icon={<Code2 className="h-4 w-4" />} />
+        <StatCard eyebrow="IMPACT" value="Attack paths" label="Fraud and impersonation context" icon={<Network className="h-4 w-4" />} />
+        <StatCard eyebrow="HARDEN" value="15 controls" label="Automated + explicit not-checked states" icon={<LockKeyhole className="h-4 w-4" />} />
+        <StatCard eyebrow="VERIFY" value="Re-scan loop" label="Fix → scan again → verify" icon={<RefreshCw className="h-4 w-4" />} />
+      </section>
+    </div>
   );
 }
 
-// ---------------------------------------------------------------------------
-// Screen 2: Scanning
-// ---------------------------------------------------------------------------
-function ScanningScreen({
-  isDark,
-  activeScan,
-  stepIndex,
-  progress,
-  onCancel,
-}: {
-  isDark: boolean;
-  activeScan: ScanResult | null;
-  stepIndex: number;
-  progress: number;
-  onCancel: () => void;
-}) {
-  const t = getTheme(isDark);
+function ScanningScreen({ target, progress, onCancel }: { target: string; progress: number; onCancel: () => void }) {
+  const stages = [
+    ["SCANNING REPOSITORY", "Cloning target and identifying platform"],
+    ["SECURITY SIGNALS", "Secrets, code rules, CORS and RLS checks"],
+    ["IMPACT REASONING", "Turning findings into attack paths"],
+    ["FRAUD RISK", "Estimating abuse and impersonation impact"],
+    ["RESULTS READY", "Fix prompts and verification state"],
+  ];
+
+  const activeIndex = Math.min(4, Math.max(0, Math.floor(progress / 20)));
+
   return (
-    <main className="mx-auto max-w-xl px-6 pb-24 pt-24 text-center">
-      <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-2xl bg-emerald-500/10 ring-1 ring-emerald-400/30">
-        <Loader2 className={`h-7 w-7 animate-spin ${isDark ? "text-emerald-400" : "text-emerald-500"}`} />
-      </div>
+    <div className="mx-auto max-w-5xl px-5 pb-20 pt-10 md:px-8 md:pt-14">
+      <section className="glass-panel overflow-hidden p-6 md:p-8">
+        <div className="flex items-start justify-between gap-4">
+          <div>
+            <div className="mono-label">LIVE SECURITY PIPELINE</div>
+            <h1 className="mt-2 text-2xl font-semibold tracking-tight text-white md:text-3xl">Building your security graph</h1>
+            <p className="mt-2 max-w-2xl truncate text-sm text-slate-500">{target}</p>
+          </div>
+          <div className="scan-orb"><Loader2 className="h-6 w-6 animate-spin text-emerald-300" /></div>
+        </div>
 
-      <h2 className={`mt-6 text-2xl font-bold ${t.heading}`}>Scanning your repository</h2>
-      <p className={`mt-2 truncate text-sm ${t.subText}`}>{activeScan?.repoUrl}</p>
-
-      <div className={`mt-8 rounded-2xl border p-6 text-left shadow-lg ${t.cardBg}`}>
-        <div className="space-y-4">
-          {SCAN_STEPS.map((step, i) => {
-            const state = i < stepIndex ? "done" : i === stepIndex ? "active" : "pending";
+        <div className="mt-9 grid gap-3 md:grid-cols-5">
+          {stages.map(([title, desc], index) => {
+            const done = index < activeIndex;
+            const active = index === activeIndex;
             return (
-              <div key={step.id} className="flex items-center gap-3">
-                {state === "done" && (
-                  <CheckCircle2 className={`h-5 w-5 shrink-0 ${isDark ? "text-emerald-400" : "text-emerald-500"}`} />
-                )}
-                {state === "active" && (
-                  <Loader2 className={`h-5 w-5 shrink-0 animate-spin ${isDark ? "text-cyan-400" : "text-cyan-500"}`} />
-                )}
-                {state === "pending" && (
-                  <Circle className={`h-5 w-5 shrink-0 ${isDark ? "text-slate-700" : "text-slate-300"}`} />
-                )}
-                <span
-                  className={`text-sm ${
-                    state === "pending" ? t.mutedText : `font-medium ${isDark ? "text-slate-200" : "text-slate-800"}`
-                  }`}
-                >
-                  {step.label}
-                </span>
+              <div key={title} className={"stage-card " + (done ? "stage-done" : "") + (active ? " stage-active" : "")}>
+                <div className="flex items-center gap-2">
+                  {done ? <CheckCircle2 className="h-4 w-4 text-emerald-300" /> : active ? <Loader2 className="h-4 w-4 animate-spin text-cyan-300" /> : <span className="stage-index">{index + 1}</span>}
+                  <span className="text-[10px] font-bold uppercase tracking-[0.14em] text-slate-300">{title}</span>
+                </div>
+                <p className="mt-2 text-xs leading-5 text-slate-500">{desc}</p>
               </div>
             );
           })}
         </div>
 
-        <div className="mt-6">
-          <div className={`mb-1.5 flex justify-between text-xs ${t.mutedText}`}>
+        <div className="mt-8">
+          <div className="flex items-center justify-between text-[10px] font-semibold uppercase tracking-[0.15em] text-slate-500">
             <span>Progress</span>
-            <span>{progress}%</span>
+            <span>{Math.round(progress)}%</span>
           </div>
-          <div className={`h-2 w-full overflow-hidden rounded-full ${isDark ? "bg-slate-800" : "bg-slate-200"}`}>
-            <div
-              className="h-full rounded-full bg-linear-to-r from-emerald-500 to-cyan-500 transition-all duration-300 ease-out"
-              style={{ width: `${progress}%` }}
-            />
+          <div className="mt-2 h-2 overflow-hidden rounded-full bg-white/5">
+            <div className="scan-progress h-full rounded-full" style={{ width: progress + "%" }} />
           </div>
         </div>
-      </div>
 
-      <button
-        onClick={onCancel}
-        className={`mt-6 text-sm underline-offset-4 transition hover:underline ${
-          isDark ? "text-slate-500 hover:text-red-400" : "text-slate-400 hover:text-red-500"
-        }`}
-      >
-        Cancel scan
-      </button>
-    </main>
+        <button onClick={onCancel} className="mt-7 inline-flex items-center gap-2 text-xs font-semibold text-slate-500 transition hover:text-red-300">
+          <X className="h-3.5 w-3.5" /> Cancel
+        </button>
+      </section>
+    </div>
   );
 }
 
-// ---------------------------------------------------------------------------
-// Finding card (used inside Results)
-// ---------------------------------------------------------------------------
-function FindingCard({
-  isDark,
-  finding,
-  isExpanded,
-  onToggleExpand,
-  onCopy,
-  copiedKey,
-}: {
-  isDark: boolean;
-  finding: Finding;
-  isExpanded: boolean;
-  onToggleExpand: () => void;
-  onCopy: (text: string, key: string) => void;
-  copiedKey: string | null;
-}) {
-  const t = getTheme(isDark);
+function AttackPathVisual({ path }: { path: AttackPath | null }) {
+  if (!path) {
+    return (
+      <div className="rounded-2xl border border-white/8 bg-white/[0.02] p-8 text-center">
+        <ShieldCheck className="mx-auto h-8 w-8 text-emerald-300" />
+        <p className="mt-3 text-sm font-semibold text-slate-200">No attack path generated</p>
+        <p className="mt-1 text-xs text-slate-500">The scan found no evidence-backed path to visualize.</p>
+      </div>
+    );
+  }
+
   return (
-    <div
-      className={`rounded-xl border p-4 transition ${
-        finding.resolved
-          ? isDark
-            ? "border-emerald-500/20 bg-emerald-500/5"
-            : "border-emerald-200 bg-emerald-50/50"
-          : t.cardBg
-      }`}
-    >
-      <button onClick={onToggleExpand} className="flex w-full items-start justify-between gap-3 text-left">
-        <div className="flex items-start gap-3">
-          <div className="mt-0.5">
-            <SeverityBadge severity={finding.severity} isDark={isDark} />
-          </div>
-          <div>
-            <p
-              className={`text-sm font-semibold ${isDark ? "text-slate-100" : "text-slate-800"} ${
-                finding.resolved ? "line-through decoration-2 opacity-60" : ""
-              }`}
-            >
-              {finding.title}
-            </p>
-            {finding.resolved && (
-              <span
-                className={`mt-1 inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[11px] font-medium ${
-                  isDark
-                    ? "border-emerald-500/30 bg-emerald-500/10 text-emerald-400"
-                    : "border-emerald-300 bg-emerald-100 text-emerald-700"
-                }`}
-              >
-                <Check className="h-3 w-3" /> Resolved
-              </span>
+    <div className="rounded-2xl border border-white/8 bg-white/[0.02] p-4 md:p-5">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <div className="mono-label">ATTACK IMPACT GRAPH</div>
+          <h3 className="mt-2 text-base font-semibold text-white">{path.title}</h3>
+        </div>
+        <div className="flex items-center gap-2">
+          <RiskBadge band={path.risk_band} />
+          <span className="rounded-full border border-white/10 px-2.5 py-1 text-[10px] font-bold text-slate-400">
+            {Math.round(path.confidence * 100)}% confidence
+          </span>
+        </div>
+      </div>
+
+      <div className="mt-6 space-y-2">
+        {path.steps.map((step, index) => (
+          <div key={step + index}>
+            <div className="graph-node">
+              <div className="graph-dot">{index + 1}</div>
+              <div className="min-w-0">
+                <div className="text-sm font-medium text-slate-200">{step}</div>
+                <div className="mt-0.5 text-[10px] uppercase tracking-[0.13em] text-slate-600">
+                  {index === 0 ? "Evidence" : index === path.steps.length - 1 ? "Potential impact" : "Attack transition"}
+                </div>
+              </div>
+            </div>
+            {index < path.steps.length - 1 && (
+              <div className="ml-5 flex h-6 items-center">
+                <ArrowDown className="h-3.5 w-3.5 text-emerald-400/50" />
+              </div>
             )}
           </div>
-        </div>
-        {isExpanded ? (
-          <ChevronUp className={`h-4 w-4 shrink-0 ${t.mutedText}`} />
-        ) : (
-          <ChevronDown className={`h-4 w-4 shrink-0 ${t.mutedText}`} />
-        )}
-      </button>
+        ))}
+      </div>
+    </div>
+  );
+}
 
-      {isExpanded && (
-        <div className={`mt-4 space-y-4 border-t pt-4 ${t.rowBorder}`}>
-          <div>
-            <p className={`text-xs font-semibold uppercase tracking-wide ${t.mutedText}`}>What it means</p>
-            <p className={`mt-1 text-sm ${isDark ? "text-slate-300" : "text-slate-600"}`}>{finding.whatItMeans}</p>
-          </div>
-          <div>
-            <p className={`text-xs font-semibold uppercase tracking-wide ${t.mutedText}`}>Why it matters</p>
-            <p className={`mt-1 text-sm ${isDark ? "text-slate-300" : "text-slate-600"}`}>{finding.whyItMatters}</p>
-          </div>
-          <div>
-            <p className={`mb-1.5 text-xs font-semibold uppercase tracking-wide ${t.mutedText}`}>Fix prompt</p>
-            <div className={`relative rounded-lg border p-3 pr-10 ${t.codeBg}`}>
-              <code className={`block whitespace-pre-wrap font-mono text-xs ${t.codeText}`}>{finding.fixPrompt}</code>
-              <button
-                onClick={() => onCopy(finding.fixPrompt, finding.id)}
-                aria-label="Copy fix prompt"
-                className={`absolute right-2 top-2 rounded-md p-1.5 transition ${
-                  isDark ? "text-slate-400 hover:bg-slate-800 hover:text-slate-200" : "text-slate-400 hover:bg-slate-200 hover:text-slate-700"
-                }`}
-              >
-                {copiedKey === finding.id ? (
-                  <Check className="h-3.5 w-3.5 text-emerald-500" />
-                ) : (
-                  <Copy className="h-3.5 w-3.5" />
-                )}
-              </button>
+function RiskSummary({
+  context,
+}: {
+  context: SecurityContext;
+}) {
+  const top = context.fraud_findings[0];
+  return (
+    <div className="glass-panel p-5 md:p-6">
+      <div className="flex flex-col gap-5 md:flex-row md:items-center md:justify-between">
+        <div className="flex items-center gap-4">
+          <div className={"score-ring " + bandClass(context.overall_risk_band)}>
+            <div className="score-ring-inner">
+              <span className="text-2xl font-semibold text-white">{scoreLabel(context.overall_risk_score)}</span>
+              <span className="text-[9px] uppercase tracking-[0.16em] text-slate-500">risk</span>
             </div>
           </div>
+          <div>
+            <div className="mono-label">FRAUD / SCAM RISK</div>
+            <div className="mt-2 flex flex-wrap items-center gap-2">
+              <h2 className="text-xl font-semibold tracking-tight text-white">{context.overall_risk_band.toUpperCase()}</h2>
+              <RiskBadge band={context.overall_risk_band} />
+            </div>
+            <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-500">
+              {top ? top.fraud_category + ". " + top.business_impact : "No evidence-backed fraud impact is currently associated with this scan."}
+            </p>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-2 gap-2 md:w-[270px]">
+          <div className="mini-stat">
+            <span>Findings</span>
+            <strong>{context.finding_count}</strong>
+          </div>
+          <div className="mini-stat">
+            <span>High / critical</span>
+            <strong>{context.open_high_critical}</strong>
+          </div>
+          <div className="mini-stat">
+            <span>Controls</span>
+            <strong>{context.hardening.checked}/{context.hardening.total}</strong>
+          </div>
+          <div className="mini-stat">
+            <span>Verify</span>
+            <strong>{context.verification.passed ? "PASS" : "OPEN"}</strong>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function FraudImpactCard({ item }: { item: FraudRiskFinding | null }) {
+  if (!item) {
+    return (
+      <section className="glass-panel p-5 md:p-6">
+        <div className="mono-label">FRAUD IMPACT ANALYZER</div>
+        <p className="mt-4 text-sm text-slate-400">No finding requires fraud impact analysis.</p>
+      </section>
+    );
+  }
+
+  return (
+    <section className="glass-panel p-5 md:p-6">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <div className="mono-label">FRAUD IMPACT ANALYZER</div>
+          <h2 className="mt-2 text-lg font-semibold text-white">{item.fraud_category}</h2>
+        </div>
+        <div className="flex items-center gap-2">
+          <SeverityBadge severity={item.severity} />
+          <span className="rounded-full border border-emerald-400/15 bg-emerald-400/5 px-2.5 py-1 text-[10px] font-semibold text-emerald-300">
+            inferred · {Math.round(item.confidence * 100)}%
+          </span>
+        </div>
+      </div>
+
+      <div className="mt-5 grid gap-3 md:grid-cols-3">
+        <div className="impact-box">
+          <span>Attacker can try</span>
+          <p>{item.attacker_action}</p>
+        </div>
+        <div className="impact-box">
+          <span>Victim impact</span>
+          <p>{item.victim_impact}</p>
+        </div>
+        <div className="impact-box">
+          <span>Business / fraud impact</span>
+          <p>{item.business_impact}</p>
+        </div>
+      </div>
+
+      <div className="mt-4 flex items-start gap-2 rounded-xl border border-cyan-400/10 bg-cyan-400/[0.03] px-3.5 py-3 text-xs leading-5 text-slate-400">
+        <TriangleAlert className="mt-0.5 h-3.5 w-3.5 shrink-0 text-cyan-300" />
+        Impact is a conservative scenario inferred from scanner evidence. VibeSecure does not claim exploitation unless a separate dynamic test proves it.
+      </div>
+    </section>
+  );
+}
+
+function HardeningPanel({ items }: { items: HardeningItem[] }) {
+  return (
+    <section className="glass-panel p-5 md:p-6">
+      <div className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
+        <div>
+          <div className="mono-label">SECURITY HARDENING</div>
+          <h2 className="mt-2 text-lg font-semibold text-white">Control coverage</h2>
+        </div>
+        <div className="text-xs text-slate-500">Automated: {items.filter((item) => item.automated).length} · Not checked: {items.filter((item) => item.status === "not_checked").length}</div>
+      </div>
+
+      <div className="mt-5 grid gap-2 sm:grid-cols-2">
+        {items.map((item) => {
+          const state = item.status === "attention" ? "attention" : item.status === "no_finding" ? "clear" : "unchecked";
+          return (
+            <div key={item.id} className="hardening-row">
+              <div className={"hardening-icon hardening-" + state}>
+                {state === "attention" ? <TriangleAlert className="h-3.5 w-3.5" /> : state === "clear" ? <Check className="h-3.5 w-3.5" /> : <span>—</span>}
+              </div>
+              <div className="min-w-0 flex-1">
+                <div className="flex items-center gap-2">
+                  <span className="text-sm font-medium text-slate-200">{item.title}</span>
+                  {item.automated && <span className="text-[9px] font-bold uppercase tracking-[0.14em] text-slate-600">auto</span>}
+                </div>
+                <p className="mt-0.5 text-[11px] leading-5 text-slate-500">{item.description}</p>
+              </div>
+              <span className="text-[10px] font-semibold uppercase tracking-[0.14em] text-slate-600">
+                {state === "attention" ? "attention" : state === "clear" ? "no finding" : "not checked"}
+              </span>
+            </div>
+          );
+        })}
+      </div>
+
+      <p className="mt-4 text-[11px] leading-5 text-slate-600">{'No finding is not proof of security. ' + items.length + ' controls are shown so gaps stay visible instead of being hidden behind a single score.'}</p>
+    </section>
+  );
+}
+
+function FindingList({
+  scan,
+  context,
+  expanded,
+  onToggle,
+  onCopy,
+  copied,
+}: {
+  scan: ApiScan;
+  context: SecurityContext;
+  expanded: string | null;
+  onToggle: (id: string) => void;
+  onCopy: (text: string) => void;
+  copied: boolean;
+}) {
+  const riskById = useMemo(
+    () => new Map(context.fraud_findings.map((item) => [item.finding_id, item])),
+    [context.fraud_findings]
+  );
+
+  return (
+    <section className="glass-panel overflow-hidden">
+      <div className="border-b border-white/8 px-5 py-4 md:px-6">
+        <div className="flex items-center justify-between gap-3">
+          <div>
+            <div className="mono-label">SECURITY FINDINGS</div>
+            <h2 className="mt-2 text-lg font-semibold text-white">{scan.findings.length} findings, ranked by evidence</h2>
+          </div>
+          <span className="hidden text-xs text-slate-500 md:block">Tap a finding to inspect impact + fix</span>
+        </div>
+      </div>
+
+      {scan.findings.length === 0 ? (
+        <div className="px-5 py-12 text-center">
+          <ShieldCheck className="mx-auto h-10 w-10 text-emerald-300" />
+          <h3 className="mt-3 text-base font-semibold text-white">No findings detected</h3>
+          <p className="mt-1 text-sm text-slate-500">The current scanner suite did not produce an evidence-backed finding.</p>
+        </div>
+      ) : (
+        <div className="divide-y divide-white/6">
+          {scan.findings.map((finding) => {
+            const open = expanded === finding.id;
+            const risk = riskById.get(finding.id);
+            return (
+              <div key={finding.id} className={finding.status === "resolved" ? "finding-row finding-resolved" : "finding-row"}>
+                <button onClick={() => onToggle(finding.id)} className="w-full px-5 py-4 text-left md:px-6">
+                  <div className="flex items-start gap-3">
+                    <div className="pt-0.5"><SeverityBadge severity={finding.severity} /></div>
+                    <div className="min-w-0 flex-1">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span className="text-sm font-semibold text-slate-200">{finding.label}</span>
+                        {finding.status === "resolved" && (
+                          <span className="inline-flex items-center gap-1 rounded-full border border-emerald-400/20 bg-emerald-400/5 px-2 py-0.5 text-[9px] font-bold uppercase tracking-[0.14em] text-emerald-300">
+                            <Check className="h-3 w-3" /> resolved
+                          </span>
+                        )}
+                        {risk && <span className="text-[10px] font-semibold text-slate-600">fraud {scoreLabel(risk.risk_score)}</span>}
+                      </div>
+                      <p className="mt-1 text-xs text-slate-500">{finding.file || "runtime / repository"}</p>
+                    </div>
+                    {open ? <ArrowDown className="h-4 w-4 rotate-180 text-slate-600" /> : <ArrowRight className="h-4 w-4 text-slate-600" />}
+                  </div>
+                </button>
+
+                {open && risk && (
+                  <div className="border-t border-white/6 bg-white/[0.015] px-5 pb-5 pt-4 md:px-6">
+                    <div className="grid gap-3 md:grid-cols-2">
+                      <div className="detail-box">
+                        <span>What it means</span>
+                        <p>{finding.what_it_means}</p>
+                      </div>
+                      <div className="detail-box">
+                        <span>Why it matters</span>
+                        <p>{finding.why_it_matters}</p>
+                      </div>
+                    </div>
+
+                    <div className="mt-3">
+                      <div className="mono-label">ATTACK PATH</div>
+                      <div className="mt-2 flex flex-wrap items-center gap-1.5">
+                        {risk.attack_path.map((step, index) => (
+                          <div key={step + index} className="flex items-center gap-1.5">
+                            <span className="rounded-lg border border-white/8 bg-white/[0.025] px-2.5 py-2 text-[11px] text-slate-300">{step}</span>
+                            {index < risk.attack_path.length - 1 && <ArrowRight className="h-3 w-3 text-emerald-400/50" />}
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+
+                    <div className="mt-4 rounded-xl border border-emerald-400/10 bg-emerald-400/[0.025] p-3.5">
+                      <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+                        <div className="min-w-0 flex-1">
+                          <div className="mono-label">RECOMMENDED FIX</div>
+                          <code className="mt-2 block whitespace-pre-wrap text-xs leading-6 text-slate-300">{risk.recommended_fix}</code>
+                        </div>
+                        <button onClick={() => onCopy(risk.recommended_fix)} className="secondary-action shrink-0">
+                          {copied ? <Check className="h-3.5 w-3.5 text-emerald-300" /> : <Clipboard className="h-3.5 w-3.5" />}
+                          {copied ? "Copied" : "Copy fix"}
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {open && !risk && (
+                  <div className="border-t border-white/6 px-5 pb-5 pt-4 text-sm text-slate-500 md:px-6">
+                    Impact analysis is not available for this finding.
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </section>
+  );
+}
+
+function ResultsScreen({
+  scan,
+  context,
+  onRescan,
+  onCopy,
+  copied,
+  onBack,
+  rescanBusy,
+  onHistory,
+}: {
+  scan: ApiScan;
+  context: SecurityContext;
+  onRescan: () => void;
+  onCopy: (text: string) => void;
+  copied: boolean;
+  onBack: () => void;
+  rescanBusy: boolean;
+  onHistory: () => void;
+}) {
+  const [expanded, setExpanded] = useState<string | null>(null);
+  const topFinding = context.fraud_findings[0] || null;
+  const topPath = context.attack_paths[0] || null;
+
+  return (
+    <div className="mx-auto max-w-6xl px-5 pb-20 pt-8 md:px-8 md:pt-10">
+      <div className="flex flex-col gap-4 border-b border-white/7 pb-6 md:flex-row md:items-end md:justify-between">
+        <div className="min-w-0">
+          <button onClick={onBack} className="mb-4 inline-flex items-center gap-2 text-xs font-semibold text-slate-500 hover:text-emerald-300">
+            <ArrowLeft className="h-3.5 w-3.5" /> Back to scan
+          </button>
+          <div className="mono-label">SECURITY REVIEW</div>
+          <h1 className="mt-2 truncate text-2xl font-semibold tracking-tight text-white md:text-3xl">{scan.target}</h1>
+          <div className="mt-2 flex flex-wrap items-center gap-2">
+            <span className="rounded-full border border-white/10 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.13em] text-slate-500">{scan.platform || "generic"}</span>
+            <span className="text-[11px] text-slate-600">{formatDate(scan.created_at)}</span>
+            <span className="text-[11px] text-slate-600">{scan.status}</span>
+          </div>
+        </div>
+        <div className="flex flex-wrap gap-2">
+          <button onClick={onHistory} className="secondary-action"><History className="h-3.5 w-3.5" /> Past scans</button>
+          <Link href="/mcp" className="secondary-action"><Terminal className="h-3.5 w-3.5" /> MCP</Link>
+          <button onClick={onRescan} disabled={rescanBusy} className="primary-action">
+            {rescanBusy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="h-3.5 w-3.5" />}
+            {rescanBusy ? "Verifying..." : "Re-scan & verify"}
+          </button>
+        </div>
+      </div>
+
+      <div className="mt-6 space-y-5">
+        <RiskSummary context={context} />
+
+        <div className="grid gap-5 xl:grid-cols-[1.15fr_0.85fr]">
+          <AttackPathVisual path={topPath} />
+          <FraudImpactCard item={topFinding} />
+        </div>
+
+        <div className="grid gap-5 xl:grid-cols-[1.1fr_0.9fr]">
+          <HardeningPanel items={context.hardening.items} />
+          <section className="glass-panel p-5 md:p-6">
+            <div className="mono-label">FIX → VERIFY</div>
+            <h2 className="mt-2 text-lg font-semibold text-white">
+              {context.verification.passed ? "Security path is clear" : "High-impact paths remain open"}
+            </h2>
+            <div className={"mt-4 rounded-2xl border p-4 " + (context.verification.passed ? "border-emerald-400/15 bg-emerald-400/[0.04]" : "border-red-400/15 bg-red-400/[0.04]")}>
+              <div className="flex items-center gap-3">
+                {context.verification.passed ? <CheckCircle2 className="h-7 w-7 text-emerald-300" /> : <XCircle className="h-7 w-7 text-red-300" />}
+                <div>
+                  <div className="text-sm font-semibold text-slate-200">{context.verification.passed ? "VERIFIED" : "ACTION REQUIRED"}</div>
+                  <div className="mt-1 text-xs leading-5 text-slate-500">{context.verification.label}</div>
+                </div>
+              </div>
+            </div>
+            <div className="mt-4 space-y-2">
+              <div className="timeline-item"><span>1</span><p>Review the evidence and attack path.</p></div>
+              <div className="timeline-item"><span>2</span><p>Copy the generated remediation prompt into your AI editor.</p></div>
+              <div className="timeline-item"><span>3</span><p>Run VibeSecure again. Resolved finding signatures are marked closed.</p></div>
+            </div>
+          </section>
+        </div>
+
+        <FindingList
+          scan={scan}
+          context={context}
+          expanded={expanded}
+          onToggle={(id) => setExpanded(expanded === id ? null : id)}
+          onCopy={onCopy}
+          copied={copied}
+        />
+
+        <section className="glass-panel p-4">
+          <div className="flex items-start gap-3">
+            <Shield className="mt-0.5 h-4 w-4 shrink-0 text-emerald-300" />
+            <p className="text-[11px] leading-5 text-slate-600">
+              Method: {context.methodology} VibeSecure keeps deterministic scanner evidence as the source of truth and uses AI only for grounded explanations/fix wording when configured.
+            </p>
+          </div>
+        </section>
+      </div>
+    </div>
+  );
+}
+
+function HistoryScreen({
+  scans,
+  loading,
+  onSelect,
+  onHome,
+}: {
+  scans: ApiScan[];
+  loading: boolean;
+  onSelect: (scan: ApiScan) => void;
+  onHome: () => void;
+}) {
+  return (
+    <div className="mx-auto max-w-5xl px-5 pb-20 pt-8 md:px-8 md:pt-12">
+      <div className="flex items-end justify-between gap-4 border-b border-white/7 pb-5">
+        <div>
+          <div className="mono-label">SCAN HISTORY</div>
+          <h1 className="mt-2 text-2xl font-semibold tracking-tight text-white">Past security reviews</h1>
+        </div>
+        <button onClick={onHome} className="secondary-action"><ScanSearch className="h-3.5 w-3.5" /> New scan</button>
+      </div>
+
+      {loading ? (
+        <div className="glass-panel mt-6 p-10 text-center text-sm text-slate-500"><Loader2 className="mx-auto h-5 w-5 animate-spin" /></div>
+      ) : scans.length === 0 ? (
+        <div className="glass-panel mt-6 p-10 text-center">
+          <History className="mx-auto h-8 w-8 text-slate-600" />
+          <p className="mt-3 text-sm font-semibold text-slate-300">No scans yet</p>
+          <p className="mt-1 text-xs text-slate-500">Your first security review will appear here.</p>
+        </div>
+      ) : (
+        <div className="mt-6 space-y-2">
+          {scans.map((scan) => {
+            const openHigh = scan.findings.filter((item) => item.status === "open" && (item.severity === "critical" || item.severity === "high")).length;
+            const passed = scan.status === "completed" && openHigh === 0;
+            return (
+              <button key={scan.id} onClick={() => onSelect(scan)} className="history-row">
+                <div className="flex min-w-0 items-center gap-3">
+                  <div className={"h-2 w-2 rounded-full " + (passed ? "bg-emerald-300" : "bg-red-300")} />
+                  <div className="min-w-0 text-left">
+                    <div className="truncate text-sm font-medium text-slate-200">{scan.target}</div>
+                    <div className="mt-1 text-[11px] text-slate-600">{scan.platform || "generic"} · {formatDate(scan.created_at)}</div>
+                  </div>
+                </div>
+                <div className="hidden items-center gap-3 sm:flex">
+                  <span className="text-[10px] font-semibold uppercase tracking-[0.13em] text-slate-600">{scan.findings.length} findings</span>
+                  <span className={"text-[10px] font-semibold uppercase tracking-[0.13em] " + (passed ? "text-emerald-300" : "text-red-300")}>{passed ? "verified" : openHigh + " high+"}</span>
+                  <ArrowRight className="h-4 w-4 text-slate-700" />
+                </div>
+              </button>
+            );
+          })}
         </div>
       )}
     </div>
   );
 }
 
-// ---------------------------------------------------------------------------
-// Screen 3: Results
-// ---------------------------------------------------------------------------
-function ResultsScreen({
-  isDark,
-  activeScan,
-  expandedIds,
-  copiedKey,
-  onToggleExpand,
-  onCopy,
-  onRescan,
-  rescanningId,
-  onGetBadge,
-  onPastScans,
-  goHome,
-  error,
-}: {
-  isDark: boolean;
-  activeScan: ScanResult | null;
-  expandedIds: Set<string>;
-  copiedKey: string | null;
-  onToggleExpand: (id: string) => void;
-  onCopy: (text: string, key: string) => void;
-  onRescan: (scanId: string) => void;
-  rescanningId?: string | null;
-  onGetBadge: () => void;
-  onPastScans: () => void;
-  goHome: () => void;
-  error?: string | null;
-}) {
-  const t = getTheme(isDark);
-
-  if (!activeScan) {
-    return (
-      <main className={`mx-auto max-w-2xl px-6 pt-24 text-center ${t.subText}`}>
-        No scan selected.{" "}
-        <button onClick={goHome} className={isDark ? "text-emerald-400 underline" : "text-emerald-600 underline"}>
-          Start a new scan
-        </button>
-      </main>
-    );
-  }
-
-  const severityCounts: Record<Severity, number> = { critical: 0, high: 0, medium: 0, low: 0 };
-  let openCriticalHigh = 0;
-  for (const f of activeScan.findings) {
-    severityCounts[f.severity] += 1;
-    if (!f.resolved && (f.severity === "critical" || f.severity === "high")) openCriticalHigh += 1;
-  }
-  const canGetBadge = activeScan.status !== "scanning" && openCriticalHigh === 0;
-
-  return (
-    <main className="mx-auto max-w-3xl px-6 pb-24 pt-10">
-      {/* Target bar */}
-      <div className={`flex flex-wrap items-center gap-3 rounded-xl border px-4 py-3 ${t.cardBg}`}>
-        <span className={`truncate text-sm font-medium ${isDark ? "text-slate-200" : "text-slate-700"}`}>
-          {activeScan.repoUrl}
-        </span>
-        <PlatformPill platform={activeScan.platform} isDark={isDark} />
-        <span className={`text-xs ${t.mutedText}`}>{formatDate(activeScan.date)}</span>
-      </div>
-
-      {/* Summary card */}
-      <div className={`mt-6 rounded-2xl border p-6 shadow-lg ${t.cardBg}`}>
-        <div className="flex flex-wrap items-center justify-between gap-4">
-          <div className="flex items-center gap-3">
-            {activeScan.status === "pass" ? (
-              <CheckCircle2 className={`h-8 w-8 ${isDark ? "text-emerald-400" : "text-emerald-500"}`} />
-            ) : (
-              <XCircle className={`h-8 w-8 ${isDark ? "text-red-400" : "text-red-500"}`} />
-            )}
-            <div>
-              <p className={`text-base font-semibold ${t.heading}`}>
-                {activeScan.status === "pass"
-                  ? "No blocking issues found"
-                  : `${openCriticalHigh} unresolved critical/high issue${openCriticalHigh === 1 ? "" : "s"}`}
-              </p>
-              <p className={`text-xs ${t.mutedText}`}>
-                {activeScan.findings.length} total finding{activeScan.findings.length === 1 ? "" : "s"}
-              </p>
-            </div>
-          </div>
-
-          <button
-            onClick={() => onRescan(activeScan.id)}
-            disabled={rescanningId === activeScan.id}
-            className={`inline-flex items-center gap-1.5 rounded-lg border px-3 py-2 text-sm font-medium transition disabled:cursor-not-allowed disabled:opacity-60 ${t.ghostBtn}`}
-          >
-            <RotateCcw className={`h-3.5 w-3.5 ${rescanningId === activeScan.id ? "animate-spin" : ""}`} />
-            {rescanningId === activeScan.id ? "Re-scanning..." : "Re-scan"}
-          </button>
-        </div>
-
-        <div className="mt-5 grid grid-cols-2 gap-3 sm:grid-cols-4">
-          {SEVERITY_ORDER.map((sev) => (
-            <div key={sev} className={`rounded-lg border px-3 py-2 text-center ${severityStyles(sev, isDark)}`}>
-              <p className="text-lg font-bold">{severityCounts[sev]}</p>
-              <p className="text-[11px] uppercase tracking-wide">{sev}</p>
-            </div>
-          ))}
-        </div>
-      </div>
-
-      {error && (
-        <div
-          className={`mt-6 flex items-start gap-2 rounded-lg border px-4 py-3 text-sm ${
-            isDark ? "border-red-500/30 bg-red-500/10 text-red-300" : "border-red-300 bg-red-50 text-red-700"
-          }`}
-        >
-          <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
-          <span>{error}</span>
-        </div>
-      )}
-
-      {/* Findings */}
-      <div className="mt-6 space-y-3">
-        {activeScan.findings.map((f) => (
-          <FindingCard
-            key={f.id}
-            isDark={isDark}
-            finding={f}
-            isExpanded={expandedIds.has(f.id)}
-            onToggleExpand={() => onToggleExpand(f.id)}
-            onCopy={onCopy}
-            copiedKey={copiedKey}
-          />
-        ))}
-      </div>
-
-      {activeScan.findings.some((f) => !f.resolved) && (
-        <p className={`mt-3 text-center text-xs ${t.mutedText}`}>
-          Apply the fix prompts above in your AI coding tool, then click Re-scan to verify.
-        </p>
-      )}
-
-      {/* Badge gating banner — makes the disabled state obvious instead of "doing nothing" */}
-      {!canGetBadge && (
-        <div
-          className={`mt-6 flex items-start gap-2 rounded-lg border px-4 py-3 text-sm ${
-            isDark ? "border-amber-500/30 bg-amber-500/10 text-amber-300" : "border-amber-300 bg-amber-50 text-amber-700"
-          }`}
-        >
-          <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
-          <span>
-            Resolve all {openCriticalHigh} remaining Critical/High finding{openCriticalHigh === 1 ? "" : "s"} to
-            unlock the badge.
-          </span>
-        </div>
-      )}
-
-      {/* Actions */}
-      <div className="mt-6 flex flex-col gap-3 sm:flex-row">
-        <button
-          onClick={onGetBadge}
-          disabled={!canGetBadge}
-          className={`flex-1 inline-flex items-center justify-center gap-2 rounded-lg px-4 py-3 text-sm font-semibold shadow-lg shadow-emerald-500/20 transition disabled:cursor-not-allowed disabled:opacity-40 ${
-            isDark ? "bg-emerald-500 text-slate-950 hover:bg-emerald-400" : "bg-emerald-500 text-white hover:bg-emerald-600"
-          }`}
-        >
-          <Award className="h-4 w-4" />
-          Get badge
-        </button>
-        <button
-          onClick={onPastScans}
-          className={`flex-1 rounded-lg border px-4 py-3 text-sm font-semibold transition ${t.ghostBtn}`}
-        >
-          Past scans
-        </button>
-      </div>
-    </main>
-  );
-}
-
-// ---------------------------------------------------------------------------
-// Screen 4: Badge & Share
-// ---------------------------------------------------------------------------
-function BadgeScreen({
-  isDark,
-  activeScan,
-  copiedKey,
-  onCopy,
-  onDone,
-}: {
-  isDark: boolean;
-  activeScan: ScanResult | null;
-  copiedKey: string | null;
-  onCopy: (text: string, key: string) => void;
-  onDone: () => void;
-}) {
-  const t = getTheme(isDark);
-  if (!activeScan) return null;
-
-  const shareLink = `${API_URL}/badge/${activeScan.id}.svg`;
-  const embedCode = `<img src="${shareLink}" alt="Secure-VibeCode Verified" />`;
-
-  return (
-    <main className="mx-auto max-w-lg px-6 pb-24 pt-16 text-center">
-      <div
-        className={`mx-auto flex flex-col items-center rounded-2xl border p-8 shadow-xl ${
-          isDark
-            ? "border-emerald-500/30 bg-linear-to-b from-emerald-500/10 to-slate-900"
-            : "border-emerald-300 bg-linear-to-b from-emerald-50 to-white"
-        }`}
-      >
-        <div className="flex h-16 w-16 items-center justify-center rounded-full bg-emerald-500 shadow-lg shadow-emerald-500/30">
-          <ShieldCheck className="h-8 w-8 text-white" />
-        </div>
-        <p className={`mt-4 text-lg font-bold ${t.heading}`}>Secure-VibeCode Verified</p>
-        <p className={`mt-1 truncate text-xs ${t.subText}`}>{activeScan.repoUrl}</p>
-        <p className={`mt-1 text-[11px] ${t.mutedText}`}>Verified {formatDate(activeScan.date)}</p>
-      </div>
-
-      <div className="mt-6 space-y-4 text-left">
-        <div>
-          <label className={`mb-1.5 block text-xs font-semibold uppercase tracking-wide ${t.mutedText}`}>
-            Shareable link
-          </label>
-          <div className="flex items-center gap-2">
-            <input
-              readOnly
-              value={shareLink}
-              className={`flex-1 truncate rounded-lg border px-3 py-2 text-xs ${
-                isDark ? "border-slate-700 bg-slate-950 text-slate-300" : "border-slate-300 bg-slate-50 text-slate-600"
-              }`}
-            />
-            <button
-              onClick={() => onCopy(shareLink, "link")}
-              className={`inline-flex items-center gap-1.5 rounded-lg border px-3 py-2 text-xs font-medium transition ${t.ghostBtn}`}
-            >
-              {copiedKey === "link" ? <Check className="h-3.5 w-3.5 text-emerald-500" /> : <Copy className="h-3.5 w-3.5" />}
-              Copy link
-            </button>
-          </div>
-        </div>
-
-        <div>
-          <label className={`mb-1.5 block text-xs font-semibold uppercase tracking-wide ${t.mutedText}`}>
-            Embed code
-          </label>
-          <div className="flex items-center gap-2">
-            <input
-              readOnly
-              value={embedCode}
-              className={`flex-1 truncate rounded-lg border px-3 py-2 font-mono text-xs ${
-                isDark ? "border-slate-700 bg-slate-950 text-slate-300" : "border-slate-300 bg-slate-50 text-slate-600"
-              }`}
-            />
-            <button
-              onClick={() => onCopy(embedCode, "embed")}
-              className={`inline-flex items-center gap-1.5 rounded-lg border px-3 py-2 text-xs font-medium transition ${t.ghostBtn}`}
-            >
-              {copiedKey === "embed" ? <Check className="h-3.5 w-3.5 text-emerald-500" /> : <Copy className="h-3.5 w-3.5" />}
-              Copy embed code
-            </button>
-          </div>
-        </div>
-      </div>
-
-      <button
-        onClick={onDone}
-        className={`mt-8 inline-flex items-center gap-1.5 rounded-lg px-5 py-2.5 text-sm font-semibold transition ${
-          isDark ? "bg-emerald-500 text-slate-950 hover:bg-emerald-400" : "bg-slate-900 text-white hover:bg-slate-800"
-        }`}
-      >
-        <X className="h-4 w-4" />
-        Done
-      </button>
-    </main>
-  );
-}
-
-// ---------------------------------------------------------------------------
-// Screen 5: History
-// ---------------------------------------------------------------------------
-function HistoryScreen({
-  isDark,
-  scans,
-  onOpenScan,
-  onNewScan,
-  onBack,
-}: {
-  isDark: boolean;
-  scans: ScanResult[];
-  onOpenScan: (id: string) => void;
-  onNewScan: () => void;
-  onBack: () => void;
-}) {
-  const t = getTheme(isDark);
-  return (
-    <main className="relative mx-auto max-w-3xl px-6 pb-32 pt-10">
-      <div className="mb-6 flex items-center gap-3">
-        <button
-          onClick={onBack}
-          className={`rounded-lg border p-2 transition ${t.ghostBtn}`}
-          aria-label="Back"
-        >
-          <ArrowLeft className="h-4 w-4" />
-        </button>
-        <h2 className={`text-xl font-bold ${t.heading}`}>Scan History</h2>
-      </div>
-
-      {scans.length === 0 ? (
-        <div
-          className={`rounded-xl border border-dashed p-10 text-center text-sm ${
-            isDark ? "border-slate-700 text-slate-500" : "border-slate-300 text-slate-400"
-          }`}
-        >
-          No scans yet. Run your first scan to see it here.
-        </div>
-      ) : (
-        <div className={`overflow-hidden rounded-xl border ${isDark ? "border-slate-800" : "border-slate-200"}`}>
-          <table className="w-full text-left text-sm">
-            <thead className={`text-xs uppercase tracking-wide ${t.mutedText} ${t.tableHeadBg}`}>
-              <tr>
-                <th className="px-4 py-3 font-medium">Target repo</th>
-                <th className="px-4 py-3 font-medium">Date</th>
-                <th className="px-4 py-3 font-medium">Platform</th>
-                <th className="px-4 py-3 font-medium">Status</th>
-              </tr>
-            </thead>
-            <tbody>
-              {scans.map((s) => (
-                <tr
-                  key={s.id}
-                  onClick={() => onOpenScan(s.id)}
-                  className={`cursor-pointer border-t transition ${t.rowBorder} ${t.tableBg} ${t.rowHover}`}
-                >
-                  <td className={`max-w-55 truncate px-4 py-3 font-medium ${isDark ? "text-slate-200" : "text-slate-700"}`}>
-                    {s.repoUrl}
-                  </td>
-                  <td className={`px-4 py-3 ${t.mutedText}`}>{formatDate(s.date)}</td>
-                  <td className="px-4 py-3">
-                    <PlatformPill platform={s.platform} isDark={isDark} />
-                  </td>
-                  <td className="px-4 py-3">
-                    <StatusPill status={s.status} isDark={isDark} />
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      )}
-
-      <button
-        onClick={onNewScan}
-        className={`fixed bottom-8 right-8 inline-flex items-center gap-2 rounded-full px-5 py-3 text-sm font-semibold shadow-xl shadow-emerald-500/30 transition ${
-          isDark ? "bg-emerald-500 text-slate-950 hover:bg-emerald-400" : "bg-emerald-500 text-white hover:bg-emerald-600"
-        }`}
-      >
-        <Sparkles className="h-4 w-4" />
-        New scan
-      </button>
-    </main>
-  );
-}
-
-// ---------------------------------------------------------------------------
-// Main app — owns all state, renders top-level screen components with props
-// ---------------------------------------------------------------------------
-export default function SecureVibeCodeApp() {
-  const [isDark, setIsDark] = useState(true);
-  const [isSignedIn, setIsSignedIn] = useState(false);
+export default function Home() {
   const [screen, setScreen] = useState<Screen>("home");
   const [urlInput, setUrlInput] = useState("");
-  const [scans, setScans] = useState<ScanResult[]>([]);
-  const [activeScanId, setActiveScanId] = useState<string | null>(null);
-  const [progress, setProgress] = useState(0);
-  const [stepIndex, setStepIndex] = useState(0);
-  const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set());
-  const [copiedKey, setCopiedKey] = useState<string | null>(null);
-  const [scanError, setScanError] = useState<string | null>(null);
-  const [rescanningId, setRescanningId] = useState<string | null>(null);
-  const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const [activeScan, setActiveScan] = useState<ApiScan | null>(null);
+  const [securityContext, setSecurityContext] = useState<SecurityContext | null>(null);
+  const [history, setHistory] = useState<ApiScan[]>([]);
+  const [historyLoading, setHistoryLoading] = useState(false);
+  const [progress, setProgress] = useState(6);
+  const [error, setError] = useState<string | null>(null);
+  const [rescanBusy, setRescanBusy] = useState(false);
+  const [copied, setCopied] = useState(false);
   const abortRef = useRef<AbortController | null>(null);
 
-  const activeScan = scans.find((s) => s.id === activeScanId) || null;
-
   useEffect(() => {
-    return () => {
-      if (intervalRef.current) clearInterval(intervalRef.current);
-      abortRef.current?.abort();
-    };
-  }, []);
+    if (screen !== "scanning") return;
+    const timer = window.setInterval(() => {
+      setProgress((current) => (current >= 92 ? current : current + 7));
+    }, 1100);
+    return () => window.clearInterval(timer);
+  }, [screen]);
 
-  // Restore past scans for a returning visitor (matched by their owner token).
-  useEffect(() => {
-    const controller = new AbortController();
-    listScans(controller.signal)
-      .then((apiScans) => {
-        const past = apiScans.filter((s) => s.status === "completed").map(mapScan);
-        setScans((prev) => {
-          const known = new Set(prev.map((s) => s.id));
-          return [...prev, ...past.filter((s) => !known.has(s.id))];
-        });
-      })
-      .catch(() => {});
-    return () => controller.abort();
-  }, []);
-
-  // Drives the decorative step/progress animation shown *while* the real
-  // request is in flight. It never reaches 100% on its own -- only the
-  // actual API response (success or failure) ends the scanning screen --
-  // so it stays honest instead of promising a fake completion time.
-  function startProgressAnimation() {
-    if (intervalRef.current) clearInterval(intervalRef.current);
-    let current = 0;
-    setProgress(0);
-    setStepIndex(0);
-    intervalRef.current = setInterval(() => {
-      current = Math.min(current + Math.floor(Math.random() * 8) + 4, 92);
-      setProgress(current);
-      setStepIndex(current < 34 ? 0 : current < 67 ? 1 : 2);
-    }, 500);
+  async function loadContext(scan: ApiScan, signal?: AbortSignal) {
+    const context = await getSecurityContext(scan.id, signal);
+    setSecurityContext(context);
   }
 
-  function stopProgressAnimation() {
-    if (intervalRef.current) clearInterval(intervalRef.current);
-  }
+  async function startScan(target = urlInput) {
+    const normalized = target.trim();
+    if (!normalized) return;
 
-  async function startScan(url: string) {
-    const trimmed = url.trim();
-    if (!trimmed) return;
-
-    setScanError(null);
+    abortRef.current?.abort();
     const controller = new AbortController();
     abortRef.current = controller;
 
-    const placeholderId = makeId();
-    const placeholder: ScanResult = {
-      id: placeholderId,
-      repoUrl: trimmed,
-      platform: detectPlatform(trimmed),
-      date: new Date().toISOString(),
-      status: "scanning",
-      findings: [],
-    };
-    setScans((prev) => [placeholder, ...prev]);
-    setActiveScanId(placeholderId);
-    setExpandedIds(new Set());
+    setError(null);
+    setActiveScan(null);
+    setSecurityContext(null);
+    setProgress(8);
     setScreen("scanning");
-    startProgressAnimation();
 
     try {
-      const apiScan = await createScan(trimmed, controller.signal);
-      const mapped = mapScan(apiScan);
-      // Swap the placeholder for the real scan (real id, real findings).
-      setScans((prev) => prev.map((s) => (s.id === placeholderId ? mapped : s)));
-      setActiveScanId(mapped.id);
-      stopProgressAnimation();
+      const scan = await createScan(normalized, controller.signal);
+      if (controller.signal.aborted) return;
       setProgress(100);
-      setStepIndex(2);
+      setActiveScan(scan);
+      await loadContext(scan, controller.signal);
       setScreen("results");
     } catch (err) {
-      if (controller.signal.aborted) return; // user cancelled -- see cancelScan
-      stopProgressAnimation();
-      setScans((prev) => prev.filter((s) => s.id !== placeholderId));
-      setActiveScanId(null);
-      setScanError(err instanceof ApiError ? err.message : "Scan failed. Check the URL and try again.");
-      setScreen("home");
-    }
-  }
-
-  async function rescanCurrent(scanId: string) {
-    if (rescanningId) return; // ignore repeat clicks while one is already in flight
-    setScanError(null);
-    setRescanningId(scanId);
-    const controller = new AbortController();
-    abortRef.current = controller;
-    try {
-      const apiScan = await rescanScan(scanId, controller.signal);
-      const mapped = mapScan(apiScan);
-      setScans((prev) => prev.map((s) => (s.id === scanId ? mapped : s)));
-    } catch (err) {
       if (controller.signal.aborted) return;
-      setScanError(err instanceof ApiError ? err.message : "Re-scan failed. Please try again.");
+      setScreen("home");
+      setError(err instanceof ApiError ? err.message : "The scan could not be completed.");
     } finally {
-      setRescanningId((prev) => (prev === scanId ? null : prev));
+      if (abortRef.current === controller) abortRef.current = null;
     }
   }
 
   function cancelScan() {
     abortRef.current?.abort();
-    stopProgressAnimation();
-    setScans((prev) => prev.filter((s) => s.id !== activeScanId));
-    setActiveScanId(null);
+    abortRef.current = null;
     setScreen("home");
+    setProgress(0);
   }
 
-  function toggleExpanded(id: string) {
-    setExpandedIds((prev) => {
-      const next = new Set(prev);
-      if (next.has(id)) next.delete(id);
-      else next.add(id);
-      return next;
-    });
-  }
-
-  async function copyToClipboard(text: string, key: string) {
+  async function openHistory() {
+    setError(null);
+    setHistoryLoading(true);
     try {
-      await navigator.clipboard.writeText(text);
-      setCopiedKey(key);
-      setTimeout(() => setCopiedKey((k) => (k === key ? null : k)), 1500);
+      setHistory(await listScans());
+      setScreen("history");
     } catch {
-      // clipboard unavailable — fail silently
+      setHistory([]);
+      setError("Could not load scan history.");
+    } finally {
+      setHistoryLoading(false);
     }
   }
 
-  function goHome() {
-    setUrlInput("");
-    setScreen("home");
+  async function selectHistoryScan(scan: ApiScan) {
+    setError(null);
+    try {
+      setActiveScan(scan);
+      await loadContext(scan);
+      setScreen("results");
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Could not load this scan.");
+    }
   }
 
-  const showHistoryLink = isSignedIn || scans.length > 0;
+  async function verifyAgain() {
+    if (!activeScan || rescanBusy) return;
+    setRescanBusy(true);
+    setError(null);
+    try {
+      const scan = await rescanScan(activeScan.id);
+      setActiveScan(scan);
+      await loadContext(scan);
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "The re-scan could not be completed.");
+    } finally {
+      setRescanBusy(false);
+    }
+  }
+
+  async function copyText(text: string) {
+    try {
+      await navigator.clipboard.writeText(text);
+      setCopied(true);
+      window.setTimeout(() => setCopied(false), 1400);
+    } catch {
+      setError("Clipboard access was blocked. Copy the fix manually.");
+    }
+  }
 
   return (
-    <div className={isDark ? "bg-slate-950" : "bg-white"}>
-      <div className={`min-h-screen transition-colors duration-300 ${isDark ? "bg-slate-950 text-slate-50" : "bg-white text-slate-900"}`}>
-        <Header
-          isDark={isDark}
-          toggleTheme={() => setIsDark((d) => !d)}
-          isSignedIn={isSignedIn}
-          toggleSignIn={() => setIsSignedIn((v) => !v)}
-          screen={screen}
-          goHome={goHome}
-          goHistory={() => setScreen("history")}
-          showHistoryLink={showHistoryLink}
+    <div className="app-shell min-h-screen">
+      {screen === "home" && (
+        <HomeScreen
+          value={urlInput}
+          onChange={setUrlInput}
+          onScan={() => void startScan()}
+          onDemo={() => {
+            setUrlInput(DEMO_REPO_URL);
+            void startScan(DEMO_REPO_URL);
+          }}
+          error={error}
         />
+      )}
 
-        {screen === "home" && (
-          <HomeScreen
-            isDark={isDark}
-            urlInput={urlInput}
-            setUrlInput={setUrlInput}
-            onScan={() => startScan(urlInput)}
-            onDemo={() => setUrlInput(DEMO_REPO_URL)}
-            showHistoryLink={showHistoryLink}
-            goHistory={() => setScreen("history")}
-            error={scanError}
-          />
-        )}
+      {screen === "scanning" && activeScan === null && (
+        <ScanningScreen
+          target={urlInput}
+          progress={progress}
+          onCancel={cancelScan}
+        />
+      )}
 
-        {screen === "scanning" && (
-          <ScanningScreen
-            isDark={isDark}
-            activeScan={activeScan}
-            stepIndex={stepIndex}
-            progress={progress}
-            onCancel={cancelScan}
-          />
-        )}
+      {screen === "results" && activeScan && securityContext && (
+        <ResultsScreen
+          scan={activeScan}
+          context={securityContext}
+          onRescan={() => void verifyAgain()}
+          onCopy={(text) => void copyText(text)}
+          copied={copied}
+          onBack={() => setScreen("home")}
+          rescanBusy={rescanBusy}
+          onHistory={() => void openHistory()}
+        />
+      )}
 
-        {screen === "results" && (
-          <ResultsScreen
-            isDark={isDark}
-            activeScan={activeScan}
-            expandedIds={expandedIds}
-            copiedKey={copiedKey}
-            onToggleExpand={toggleExpanded}
-            onCopy={copyToClipboard}
-            onRescan={rescanCurrent}
-            rescanningId={rescanningId}
-            onGetBadge={() => setScreen("badge")}
-            onPastScans={() => setScreen("history")}
-            goHome={goHome}
-            error={scanError}
-          />
-        )}
+      {screen === "history" && (
+        <HistoryScreen
+          scans={history}
+          loading={historyLoading}
+          onSelect={(scan) => void selectHistoryScan(scan)}
+          onHome={() => setScreen("home")}
+        />
+      )}
 
-        {screen === "badge" && (
-          <BadgeScreen
-            isDark={isDark}
-            activeScan={activeScan}
-            copiedKey={copiedKey}
-            onCopy={copyToClipboard}
-            onDone={() => setScreen("results")}
-          />
-        )}
-
-        {screen === "history" && (
-          <HistoryScreen
-            isDark={isDark}
-            scans={scans}
-            onOpenScan={(id) => {
-              setActiveScanId(id);
-              setScreen("results");
-            }}
-            onNewScan={goHome}
-            onBack={goHome}
-          />
-        )}
-      </div>
+      {screen === "home" && error && (
+        <div className="pointer-events-none fixed bottom-5 right-5 z-50 max-w-sm">
+          <div className="pointer-events-auto flex items-start gap-2 rounded-xl border border-red-400/15 bg-slate-950/90 px-4 py-3 text-xs text-red-200 shadow-2xl backdrop-blur-xl">
+            <TriangleAlert className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+            <span>{error}</span>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
