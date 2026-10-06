@@ -271,5 +271,5 @@ export function getSecurityContext(
   scanId: string,
   signal?: AbortSignal
 ): Promise<SecurityContext> {
-  return apiFetch<SecurityContext>(\`/scans/\${scanId}/security-context\`, {}, signal);
+  return apiFetch<SecurityContext>(`/scans/${scanId}/security-context`, {}, signal);
 }
