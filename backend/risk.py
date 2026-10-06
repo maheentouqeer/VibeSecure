@@ -97,7 +97,14 @@ def build_attack_paths(assessments: list[dict[str, Any]]) -> list[dict[str, Any]
 
 
 def build_context(findings: list[dict[str, Any]]) -> dict[str, Any]:
-    summary = summarize(findings)
+    # Keep historical resolved findings visible to the UI, but never let them
+    # inflate the current fraud-risk score or verification state.
+    open_findings = [
+        finding
+        for finding in findings
+        if str(finding.get("status") or "open") == "open"
+    ]
+    summary = summarize(open_findings)
     assessments = summary["findings"]
     open_high_critical = summary["open_high_critical"]
     return {
