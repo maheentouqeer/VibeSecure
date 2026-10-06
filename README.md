@@ -1,4 +1,43 @@
-# Secure-VibeCode
+# VibeSecure
+
+**Security for the AI-native software era.**
+
+VibeSecure is evolving from a vulnerability scanner into a security control plane for software built with AI coding tools. It combines deterministic security evidence with grounded reasoning to answer a more useful question than "what is vulnerable?":
+
+> **How could this vulnerability become an attack, fraud, or impersonation scenario — and is the risk still present after the fix?**
+
+## ForgeHacks V1
+
+The current build is optimized for the AI + Cybersecurity track:
+
+`Security vulnerability → attack path → fraud/impersonation impact → fix → re-scan → verified`
+
+New in V1:
+
+- **Fraud Impact Analyzer** — maps findings to a conservative attacker action, victim impact, business/fraud impact, risk score, and confidence.
+- **Attack Impact Graph** — visualizes how a security weakness can become a real-world abuse path.
+- **Security Hardening Engine** — exposes 15 important controls and distinguishes `attention`, `no finding`, and `not checked`.
+- **Fix → Verify loop** — uses the existing deterministic finding fingerprints to confirm when a finding disappears after remediation.
+- **Premium security command center UI** — dark, developer-focused dashboard centered on risk, impact, hardening, and verification.
+- **MIT license** — keeps the repository open for future integrations and the post-hackathon roadmap.
+
+See [FORGEHACKS_V1.md](FORGEHACKS_V1.md) for the demo storyline and the explicit pre-existing-project disclosure, and [STARTUP_VISION.md](STARTUP_VISION.md) for the longer-term startup direction.
+
+## Startup direction
+
+The long-term product thesis is:
+
+> **VibeSecure is the security control plane for software built by AI agents.**
+>
+> Detect what coding agents introduce. Understand the real attack path. Fix it. Prove it is fixed.
+
+VibeSecure is intentionally not trying to replace Semgrep, CodeQL, GitHub, or dependency-security engines. The planned product layer is:
+
+`evidence → reasoning → business impact → remediation → verification → policy`
+
+Existing capabilities already provide repository/live-URL scanning, secrets detection, Semgrep analysis, Supabase RLS checks, platform detection, Gemini-backed explanations/fix prompts, MCP access, persistent scan history, and deterministic re-scan verification.
+
+---
 
 Secure-VibeCode is an AI-powered security gate and vulnerability scanner designed specifically for vibe-coded applications (built with tools like Lovable, Bolt.new, v0, Cursor, Replit, or Copilot). It scans repositories or live URLs for exposed secrets, missing access controls, and common logic flaws, providing plain-English explanations and ready-to-use fix prompts for your AI coding assistant.
 
