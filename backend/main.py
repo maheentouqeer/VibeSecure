@@ -26,7 +26,7 @@ from sqlalchemy import update
 from sqlalchemy.orm import Session
 
 from agents.verify_agent import fingerprint
-from backend import accounts, admin, badge, billing, db, deletion, github_oauth, health, invites, jobs, limits, plans, schemas, whop
+from backend import accounts, admin, badge, billing, db, deletion, github_oauth, health, invites, jobs, limits, plans, risk, schemas, whop
 from backend.access import Actor, get_scan_or_404, org_role, scan_owner_clause
 from backend.auth import get_actor
 from orchestrator import run_full_scan
@@ -485,6 +485,23 @@ def get_badge(
         open_high=open_high,
         reason=reason,
     )
+
+
+
+@app.get("/scans/{scan_id}/security-context")
+def get_security_context(
+    scan_id: str,
+    session: Session = Depends(db.get_db),
+    actor: Actor = Depends(get_actor),
+):
+    """Return derived fraud-impact, attack-path, hardening, and verification context.
+
+    This is intentionally computed from persisted findings instead of stored as
+    columns, keeping the original scan schema backward-compatible for V1.
+    """
+    scan = get_scan_or_404(session, scan_id, actor, allow_org_admin=True)
+    findings = [_finding_to_dict(f) for f in scan.findings]
+    return risk.build_context(findings)
 
 
 @app.get("/badge/{scan_id}.svg")
