@@ -4,7 +4,7 @@ import Navbar from '../components/navbar';
 
 export const metadata: Metadata = {
   title: 'VibeSecure',
-  description: 'AI-Powered Security & Compliance Platform',
+  description: 'Security for the AI-native software era: scan, understand attack paths, fix, and verify.',
 };
 
 export default function RootLayout({
