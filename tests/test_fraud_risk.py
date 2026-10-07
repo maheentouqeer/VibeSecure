@@ -106,3 +106,23 @@ def test_resolved_findings_do_not_keep_current_risk_open():
     assert context["open_high_critical"] == 0
     assert context["verification"]["passed"] is True
     assert context["fraud_findings"] == []
+
+
+def test_hardening_scanner_flags_client_side_authorization_and_unsafe_upload(tmp_path: Path):
+    source = tmp_path / "admin.tsx"
+    source.write_text(
+        'const isAdmin = await supabase.from("user_roles").select("role");\n'
+        'await supabase.storage.from("auction-media").upload(path, file);\n'
+        'accept="image/*"\n'
+    )
+    findings = scan_hardening(tmp_path)
+    categories = {item["category"] for item in findings}
+    assert "client_side_authorization" in categories
+    assert "unsafe_file_upload" in categories
+
+
+def test_hardening_scanner_flags_missing_dependency_lockfile(tmp_path: Path):
+    (tmp_path / "package.json").write_text('{"dependencies":{"react":"19.0.0"}}')
+    findings = scan_hardening(tmp_path)
+    dependency = next(item for item in findings if item["category"] == "missing_dependency_lockfile")
+    assert dependency["raw_severity"] == "medium"
