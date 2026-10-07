@@ -239,7 +239,7 @@ export interface HardeningItem {
   id: string;
   title: string;
   description: string;
-  status: "attention" | "no_finding" | "not_checked";
+  status: "attention" | "no_finding";
   automated: boolean;
   evidence_count: number;
   finding_ids: string[];
