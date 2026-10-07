@@ -23,9 +23,9 @@ _HARDENING_CONTROLS: tuple[dict[str, Any], ...] = (
     {"id": "csrf", "title": "CSRF protection", "description": "State-changing browser actions should resist cross-site request forgery.", "keywords": ()},
     {"id": "cookies", "title": "Secure cookies", "description": "Authentication cookies should use secure, HttpOnly, and appropriate SameSite settings.", "keywords": ()},
     {"id": "rate-limit", "title": "Rate limiting", "description": "Login, recovery, and high-value actions should resist automation.", "keywords": ()},
-    {"id": "uploads", "title": "File-upload controls", "description": "Uploads should validate type, size, storage, and execution risk.", "keywords": ()},
-    {"id": "dependencies", "title": "Dependency hygiene", "description": "Third-party packages should be pinned and checked for known vulnerabilities.", "keywords": ()},
-    {"id": "client-trust", "title": "Client-side trust", "description": "Security decisions should be enforced on the server, not only in the UI.", "keywords": ()},
+    {"id": "uploads", "title": "File-upload controls", "description": "Uploads should validate type, size, storage, and execution risk.", "keywords": ("unsafe_file_upload",)},
+    {"id": "dependencies", "title": "Dependency hygiene", "description": "Dependency manifests should be accompanied by a lockfile before release.", "keywords": ("missing_dependency_lockfile",)},
+    {"id": "client-trust", "title": "Client-side trust", "description": "Security decisions should be enforced on the server, not only in the UI.", "keywords": ("client_side_authorization",)},
     {"id": "logging", "title": "Security audit logging", "description": "Important authentication and security events should be observable.", "keywords": ()},
 )
 
