@@ -71,7 +71,20 @@ def usable_models() -> list[str]:
         configured = list(configured_models())
         healthy = [m for m in configured if m not in _dead and _cooling.get(m, 0.0) <= now]
         not_dead = [m for m in configured if m not in _dead]
-    return healthy or not_dead or configured
+
+    # If every non-dead model is cooling down, do not immediately retry a
+    # rate-limited/failed model. Let callers use their deterministic fallback
+    # for this scan instead of turning one quota event into repeated network
+    # calls across every finding.
+    if not healthy and any(m in _cooling for m in not_dead):
+        return []
+
+    # If all configured models are marked permanently unavailable, there is
+    # nothing useful to retry. Returning [] makes the agents fall back cleanly.
+    if not healthy and not not_dead:
+        return []
+
+    return healthy or not_dead
 
 
 def report_failure(model: str, error: BaseException | str) -> None:
