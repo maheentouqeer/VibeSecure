@@ -44,17 +44,9 @@ def build_hardening(findings: list[dict[str, Any]]) -> dict[str, Any]:
                 if any(keyword.lower() in haystack for keyword in control["keywords"]):
                     matches.append(finding)
 
-        automated = bool(control["keywords"])
+        automated = True
         open_matches = [f for f in matches if str(f.get("status") or "open") == "open"]
-
-        if open_matches:
-            status = "attention"
-        elif matches:
-            status = "no_finding"
-        elif automated:
-            status = "no_finding"
-        else:
-            status = "not_checked"
+        status = "attention" if open_matches else "no_finding"
 
         items.append(
             {
@@ -69,7 +61,7 @@ def build_hardening(findings: list[dict[str, Any]]) -> dict[str, Any]:
         )
 
     automated_count = sum(1 for item in items if item["automated"])
-    checked_count = sum(1 for item in items if item["status"] != "not_checked")
+    checked_count = len(items)
     attention_count = sum(1 for item in items if item["status"] == "attention")
     return {
         "total": len(items),
