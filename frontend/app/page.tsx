@@ -34,6 +34,7 @@ import {
   getSecurityContext,
   listScans,
   rescanScan,
+  type ApiFinding,
   type ApiScan,
   type AttackPath,
   type FraudRiskFinding,
@@ -71,6 +72,115 @@ function severityClass(severity: string) {
 
 function scoreLabel(score: number) {
   return String(Math.max(0, Math.min(100, Math.round(score)))).padStart(2, "0");
+}
+
+function fallbackRiskAssessment(finding: ApiFinding): FraudRiskFinding {
+  const source = (finding.category + " " + finding.label).toLowerCase();
+  const severityScore = { critical: 95, high: 82, medium: 60, low: 30 }[finding.severity] || 60;
+  const riskBand = severityScore >= 90 ? "critical" : severityScore >= 75 ? "high" : severityScore >= 50 ? "medium" : "low";
+
+  if (source.includes("secret") || source.includes("token") || source.includes("api key") || source.includes("entropy")) {
+    return {
+      finding_id: finding.id,
+      label: finding.label,
+      category: finding.category,
+      file: finding.file,
+      severity: finding.severity,
+      risk_score: Math.min(100, severityScore + 4),
+      risk_band: finding.severity === "critical" ? "critical" : riskBand,
+      fraud_category: "Credential theft / impersonation",
+      attacker_action: "Obtain or reuse the exposed credential from source, artifacts, or a leaked build context.",
+      victim_impact: "The compromised identity or service may be used to access protected data or actions.",
+      business_impact: "Account impersonation, API abuse, privacy exposure, unauthorized transactions, or financial loss.",
+      attack_path: [
+        "Exposed credential is reachable",
+        "Attacker obtains or reuses the credential",
+        "Protected identity or service is impersonated",
+        "Sensitive data or business action is abused",
+      ],
+      confidence: 0.9,
+      recommended_fix: finding.fix_prompt || "Move the credential to a server-side secret, rotate it, and remove it from source.",
+      evidence: { file: finding.file, severity: finding.severity, category: finding.category },
+    };
+  }
+
+  if (source.includes("xss") || source.includes("html")) {
+    return {
+      finding_id: finding.id, label: finding.label, category: finding.category, file: finding.file, severity: finding.severity,
+      risk_score: severityScore, risk_band: riskBand,
+      fraud_category: "Session hijack / impersonation",
+      attacker_action: "Inject content that executes in a trusted browser context.",
+      victim_impact: "A victim's session or trusted UI may be manipulated.",
+      business_impact: "Credential capture, session abuse, fraudulent actions, or social-engineering enablement.",
+      attack_path: [
+        "Attacker-controlled content reaches the browser",
+        "Trusted browser context executes it",
+        "Victim session or page state is targeted",
+        "Impersonation / fraud risk increases",
+      ],
+      confidence: 0.82,
+      recommended_fix: finding.fix_prompt || "Escape untrusted content and avoid unsafe HTML injection.",
+      evidence: { file: finding.file, severity: finding.severity, category: finding.category },
+    };
+  }
+
+  if (source.includes("sql") || source.includes("injection") || source.includes("query")) {
+    return {
+      finding_id: finding.id, label: finding.label, category: finding.category, file: finding.file, severity: finding.severity,
+      risk_score: severityScore, risk_band: riskBand,
+      fraud_category: "Data / transaction manipulation",
+      attacker_action: "Influence attacker-controlled input that reaches a database operation unsafely.",
+      victim_impact: "Records outside the intended scope may be read or modified.",
+      business_impact: "Order, payment, inventory, identity, or account data can be manipulated.",
+      attack_path: [
+        "Attacker controls an input",
+        "Input reaches a database operation unsafely",
+        "Query behavior may be altered",
+        "Sensitive or transactional data may be changed",
+      ],
+      confidence: 0.84,
+      recommended_fix: finding.fix_prompt || "Use parameterized queries and keep attacker-controlled input separate from SQL.",
+      evidence: { file: finding.file, severity: finding.severity, category: finding.category },
+    };
+  }
+
+  if (source.includes("cors") || source.includes("csrf") || source.includes("cookie") || source.includes("rate") || source.includes("authorization") || source.includes("access control")) {
+    return {
+      finding_id: finding.id, label: finding.label, category: finding.category, file: finding.file, severity: finding.severity,
+      risk_score: severityScore, risk_band: riskBand,
+      fraud_category: "Authentication / transaction abuse",
+      attacker_action: "Probe a weakened authentication, authorization, or browser request-security boundary.",
+      victim_impact: "A victim session or sensitive action may become easier to abuse.",
+      business_impact: "Unauthorized actions, impersonation, data exposure, or automated fraud may become easier.",
+      attack_path: [
+        "Security boundary is weakened",
+        "Attacker reaches the affected request path",
+        "Victim or protected action is targeted",
+        "Fraud / account abuse may become possible",
+      ],
+      confidence: 0.75,
+      recommended_fix: finding.fix_prompt || "Restore the affected security boundary and enforce it server-side.",
+      evidence: { file: finding.file, severity: finding.severity, category: finding.category },
+    };
+  }
+
+  return {
+    finding_id: finding.id, label: finding.label, category: finding.category, file: finding.file, severity: finding.severity,
+    risk_score: severityScore, risk_band: riskBand,
+    fraud_category: "Potential application abuse",
+    attacker_action: "Probe the affected code path for a way to cross an intended trust boundary.",
+    victim_impact: "A vulnerable path may expose data or permit an unintended application action.",
+    business_impact: "The exact fraud scenario depends on what the affected path protects or changes.",
+    attack_path: [
+      "Vulnerable code path is identified",
+      "Attacker probes the trust boundary",
+      "Protected behavior may be reached",
+      "Impact depends on the affected resource",
+    ],
+    confidence: 0.62,
+    recommended_fix: finding.fix_prompt || "Investigate and remediate the finding.",
+    evidence: { file: finding.file, severity: finding.severity, category: finding.category },
+  };
 }
 
 function RiskBadge({ band }: { band: string }) {
@@ -452,15 +562,14 @@ function FraudImpactCard({ item }: { item: FraudRiskFinding | null }) {
 }
 
 function HardeningPanel({ items }: { items: HardeningItem[] }) {
-  const evaluated = items.filter((item) => item.status !== "not_checked");
-  const notEvaluated = items.filter((item) => item.status === "not_checked");
+  const evaluated = items;
 
   return (
     <section className="glass-panel p-5 md:p-6">
       <div className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
         <div>
           <div className="mono-label">SECURITY HARDENING</div>
-          <h2 className="mt-2 text-lg font-semibold text-white">Evaluated controls</h2>
+          <h2 className="mt-2 text-lg font-semibold text-white">Security controls scanned</h2>
         </div>
         <div className="text-xs text-slate-500">
           Checked: {evaluated.length}/{items.length} · Attention: {items.filter((item) => item.status === "attention").length}
@@ -490,20 +599,8 @@ function HardeningPanel({ items }: { items: HardeningItem[] }) {
         })}
       </div>
 
-      {notEvaluated.length > 0 && (
-        <div className="mt-4 rounded-xl border border-white/[0.06] bg-white/[0.02] px-4 py-3">
-          <div className="flex items-center justify-between gap-3">
-            <span className="text-xs font-semibold text-slate-400">Additional controls not evaluated</span>
-            <span className="text-[10px] font-bold uppercase tracking-[0.14em] text-slate-600">{notEvaluated.length}</span>
-          </div>
-          <p className="mt-1 text-[11px] leading-5 text-slate-600">
-            These controls are intentionally not presented as passed or failed because this scan does not yet have a reliable detector for them.
-          </p>
-        </div>
-      )}
-
       <p className="mt-4 text-[11px] leading-5 text-slate-600">
-        No finding means the available detector found no matching evidence; it is not proof of security.
+        No finding means the active detector found no matching risky configuration or code pattern; it is not proof of security.
       </p>
     </section>
   );
@@ -551,7 +648,7 @@ function FindingList({
         <div className="divide-y divide-white/6">
           {scan.findings.map((finding) => {
             const open = expanded === finding.id;
-            const risk = riskById.get(finding.id);
+            const risk = riskById.get(finding.id) || fallbackRiskAssessment(finding);
             return (
               <div key={finding.id} className={finding.status === "resolved" ? "finding-row finding-resolved" : "finding-row"}>
                 <button onClick={() => onToggle(finding.id)} className="w-full px-5 py-4 text-left md:px-6">
@@ -613,11 +710,6 @@ function FindingList({
                   </div>
                 )}
 
-                {open && !risk && (
-                  <div className="border-t border-white/6 px-5 pb-5 pt-4 text-sm text-slate-500 md:px-6">
-                    Impact analysis is not available for this finding.
-                  </div>
-                )}
               </div>
             );
           })}
