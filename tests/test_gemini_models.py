@@ -4,6 +4,13 @@ import pytest
 from agents import gemini_models as gm
 
 
+@pytest.fixture(autouse=True)
+def reset_model_health():
+    gm.reset()
+    yield
+    gm.reset()
+
+
 def test_defaults_are_current_models_only():
     # gemini-1.5-flash (shut down Nov 2025) and gemini-2.0-flash (shut down Jun 2026) must not return.
     assert "gemini-1.5-flash" not in gm.DEFAULT_MODELS
@@ -61,21 +68,21 @@ def test_success_clears_a_cooldown():
     assert first in gm.usable_models()
 
 
-def test_when_all_are_cooling_dead_models_are_still_left_out():
+def test_all_rate_limited_models_return_empty_for_deterministic_fallback():
     first, *rest = gm.configured_models()
     gm.report_failure(first, RuntimeError("404 not found"))
     for model in rest:
         gm.report_failure(model, RuntimeError("429 rate limited"))
-    assert gm.usable_models() == rest
+    assert gm.usable_models() == []
 
 
-def test_never_returns_an_empty_list():
+def test_all_permanently_unavailable_models_return_empty():
     for model in gm.configured_models():
         gm.report_failure(model, RuntimeError("404 not found"))
-    assert gm.usable_models() == list(gm.configured_models())
+    assert gm.usable_models() == []
 
 
-def test_a_dead_model_is_not_retried_for_every_finding(monkeypatch):
+def test_rate_limited_models_are_not_retried_for_every_finding(monkeypatch):
     """The cost this module exists to remove: one failed call per finding, per agent."""
     import sys
     import types
@@ -106,6 +113,6 @@ def test_a_dead_model_is_not_retried_for_every_finding(monkeypatch):
     finding = {"category": "hardcoded_secret", "file": "a.ts", "label": "AWS Access Key", "severity": "high"}
     explainer_agent.explain(finding)
     explainer_agent.explain(finding)
-    # the first finding tries every model; the dead one is never called again
-    assert calls.count("gemini-3.8-flash") == 1
-    assert len(calls) == len(gm.DEFAULT_MODELS) + (len(gm.DEFAULT_MODELS) - 1)
+    # Once all models have failed, later findings should make no additional
+    # network attempts and instead use the deterministic fallback.
+    assert calls == list(gm.DEFAULT_MODELS)
