@@ -20,13 +20,13 @@ _HARDENING_CONTROLS: tuple[dict[str, Any], ...] = (
     {"id": "xss", "title": "Cross-site scripting", "description": "Untrusted content should not execute in a user's browser.", "keywords": ("xss", "cross-site scripting", "innerhtml")},
     {"id": "cors", "title": "CORS boundary", "description": "Only trusted application origins should access browser-facing APIs.", "keywords": ("cors_misconfig", "cors allows any origin")},
     {"id": "headers", "title": "Security headers", "description": "Browser hardening headers reduce common web attack paths.", "keywords": ("missing_header", "content-security-policy", "x-frame-options", "strict-transport-security")},
-    {"id": "csrf", "title": "CSRF protection", "description": "State-changing browser actions should resist cross-site request forgery.", "keywords": ()},
-    {"id": "cookies", "title": "Secure cookies", "description": "Authentication cookies should use secure, HttpOnly, and appropriate SameSite settings.", "keywords": ()},
-    {"id": "rate-limit", "title": "Rate limiting", "description": "Login, recovery, and high-value actions should resist automation.", "keywords": ()},
-    {"id": "uploads", "title": "File-upload controls", "description": "Uploads should validate type, size, storage, and execution risk.", "keywords": ()},
-    {"id": "dependencies", "title": "Dependency hygiene", "description": "Third-party packages should be pinned and checked for known vulnerabilities.", "keywords": ()},
-    {"id": "client-trust", "title": "Client-side trust", "description": "Security decisions should be enforced on the server, not only in the UI.", "keywords": ()},
-    {"id": "logging", "title": "Security audit logging", "description": "Important authentication and security events should be observable.", "keywords": ()},
+    {"id": "csrf", "title": "CSRF protection", "description": "State-changing browser actions should resist cross-site request forgery.", "keywords": ("csrf_disabled", "csrf_exempt", "csrf protection disabled")},
+    {"id": "cookies", "title": "Secure cookies", "description": "Authentication cookies should use secure, HttpOnly, and appropriate SameSite settings.", "keywords": ("insecure_cookie_config", "insecure cookie")},
+    {"id": "rate-limit", "title": "Rate limiting", "description": "Login, recovery, and high-value actions should resist automation.", "keywords": ("rate_limit_disabled", "rate limiting disabled", "skip_rate_limit")},
+    {"id": "uploads", "title": "File-upload controls", "description": "Uploads should validate type, size, storage, and execution risk.", "keywords": ("unsafe_file_upload",)},
+    {"id": "dependencies", "title": "Dependency hygiene", "description": "Dependency manifests should be accompanied by a lockfile before release.", "keywords": ("missing_dependency_lockfile",)},
+    {"id": "client-trust", "title": "Client-side trust", "description": "Security decisions should be enforced on the server, not only in the UI.", "keywords": ("client_side_authorization",)},
+    {"id": "logging", "title": "Security audit logging", "description": "Important authentication and security events should be observable.", "keywords": ("security_logging_disabled", "audit logging disabled", "logging disabled")},
 )
 
 
@@ -44,17 +44,9 @@ def build_hardening(findings: list[dict[str, Any]]) -> dict[str, Any]:
                 if any(keyword.lower() in haystack for keyword in control["keywords"]):
                     matches.append(finding)
 
-        automated = bool(control["keywords"])
+        automated = True
         open_matches = [f for f in matches if str(f.get("status") or "open") == "open"]
-
-        if open_matches:
-            status = "attention"
-        elif matches:
-            status = "no_finding"
-        elif automated:
-            status = "no_finding"
-        else:
-            status = "not_checked"
+        status = "attention" if open_matches else "no_finding"
 
         items.append(
             {
@@ -69,7 +61,7 @@ def build_hardening(findings: list[dict[str, Any]]) -> dict[str, Any]:
         )
 
     automated_count = sum(1 for item in items if item["automated"])
-    checked_count = sum(1 for item in items if item["status"] != "not_checked")
+    checked_count = len(items)
     attention_count = sum(1 for item in items if item["status"] == "attention")
     return {
         "total": len(items),
@@ -77,7 +69,7 @@ def build_hardening(findings: list[dict[str, Any]]) -> dict[str, Any]:
         "checked": checked_count,
         "attention": attention_count,
         "items": items,
-        "note": "No finding is not the same as a proof of security. 'Not checked' means VibeSecure has no detector for that control yet.",
+        "note": "No finding means the active detector found no matching risky configuration or code pattern; it is not proof of security.",
     }
 
 
