@@ -9,6 +9,7 @@ import {
   LogIn,
   Settings,
   Shield,
+  Terminal,
   UserPlus,
 } from 'lucide-react';
 
