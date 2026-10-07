@@ -37,7 +37,7 @@ def test_secret_risk_is_very_high_and_actionable():
     assert result["recommended_fix"]
 
 
-def test_context_exposes_verification_and_not_checked_controls():
+def test_context_exposes_verification_and_all_hardening_controls():
     context = build_context(
         [
             {
@@ -53,7 +53,9 @@ def test_context_exposes_verification_and_not_checked_controls():
     )
     assert context["open_high_critical"] == 1
     assert context["verification"]["passed"] is False
-    assert any(item["status"] == "not_checked" for item in context["hardening"]["items"])
+    assert context["hardening"]["total"] == 15
+    assert context["hardening"]["checked"] == 15
+    assert all(item["automated"] for item in context["hardening"]["items"])
 
 
 def test_hardening_marks_detected_control_attention():
@@ -106,3 +108,64 @@ def test_resolved_findings_do_not_keep_current_risk_open():
     assert context["open_high_critical"] == 0
     assert context["verification"]["passed"] is True
     assert context["fraud_findings"] == []
+    assert context["hardening"]["checked"] == 15
+
+
+def test_hardening_scanner_flags_client_side_authorization_and_unsafe_upload(tmp_path: Path):
+    source = tmp_path / "admin.tsx"
+    source.write_text(
+        'const isAdmin = await supabase.from("user_roles").select("role");\n'
+        'await supabase.storage.from("auction-media").upload(path, file);\n'
+        'accept="image/*"\n'
+    )
+    findings = scan_hardening(tmp_path)
+    categories = {item["category"] for item in findings}
+    assert "client_side_authorization" in categories
+    assert "unsafe_file_upload" in categories
+
+
+def test_hardening_scanner_flags_missing_dependency_lockfile(tmp_path: Path):
+    (tmp_path / "package.json").write_text('{"dependencies":{"react":"19.0.0"}}')
+    findings = scan_hardening(tmp_path)
+    dependency = next(item for item in findings if item["category"] == "missing_dependency_lockfile")
+    assert dependency["raw_severity"] == "medium"
+
+
+def test_hardening_scanner_flags_explicitly_disabled_security_controls(tmp_path: Path):
+    source = tmp_path / "security.py"
+    source.write_text(
+        "@csrf_exempt\ndef update(): pass\n"
+        "response.set_cookie('session', token, secure=False, httponly=False)\n"
+        "RATE_LIMIT_ENABLED = False\n"
+        "logging.disable(logging.CRITICAL)\n"
+    )
+    categories = {item["category"] for item in scan_hardening(tmp_path)}
+    assert "csrf_disabled" in categories
+    assert "insecure_cookie_config" in categories
+    assert "rate_limit_disabled" in categories
+    assert "security_logging_disabled" in categories
+
+
+def test_all_secret_labels_receive_fraud_impact():
+    labels = [
+        "AWS Access Key",
+        "Stripe Secret Key",
+        "GitHub Token",
+        "Google API Key",
+        "Generic Bearer Secret",
+        "High Entropy Secret (entropy: 4.58)",
+    ]
+    for label in labels:
+        result = analyze_finding(
+            {
+                "id": label,
+                "category": "hardcoded_secret",
+                "label": label,
+                "file": "security-lab/secrets.ts",
+                "severity": "critical" if "Entropy" not in label else "high",
+                "fix_prompt": "Move the credential to a server-side secret and rotate it.",
+            }
+        )
+        assert result["fraud_category"] == "Credential theft / impersonation"
+        assert result["attack_path"]
+        assert result["recommended_fix"]
