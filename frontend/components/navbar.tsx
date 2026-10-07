@@ -9,7 +9,6 @@ import {
   LogIn,
   Settings,
   Shield,
-  Terminal,
   UserPlus,
 } from 'lucide-react';
 
@@ -72,18 +71,6 @@ export default function Navbar() {
           </nav>
         </div>
 
-        <Link
-          href="/mcp"
-          className="mx-1 hidden rounded-2xl border border-cyan-400/10 bg-cyan-400/[0.025] p-3 lg:block"
-        >
-          <div className="flex items-center gap-2">
-            <Terminal className="h-4 w-4 text-cyan-300" />
-            <span className="text-xs font-semibold text-slate-200">MCP ready</span>
-          </div>
-          <p className="mt-1 pl-6 text-[10px] leading-4 text-slate-600">
-            Run security checks from your coding agent.
-          </p>
-        </Link>
 
         <div className="mx-1 hidden rounded-2xl border border-white/[0.06] bg-white/[0.018] p-3 lg:block">
           <div className="flex items-center gap-2">
