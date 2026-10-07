@@ -16,7 +16,7 @@ from agents.explainer_agent import explain
 from agents.fixprompt_agent import generate_fix_prompt
 from agents.privacy import Masker
 from agents.triage_agent import triage
-from orchestrator import enrich
+from orchestrator import enrich, gemini_finding_limit
 
 PATH = "src/billing/acme-corp-stripe.ts"
 PATH2 = "supabase/migrations/20240101_patients.sql"
@@ -135,7 +135,8 @@ def test_the_whole_pipeline_leaks_nothing_and_still_reads_naturally(gemini):
     results = enrich(_findings(), "lovable_supabase")
 
     _assert_clean(fake.prompts)
-    assert len(fake.prompts) >= 1 + 2 * 4  # triage + explain + fix prompt per finding
+    expected_ai_findings = min(len(_findings()), gemini_finding_limit())
+    assert len(fake.prompts) == 1 + 2 * expected_ai_findings  # triage + bounded explain + fix prompts
     by_label = {r["label"]: r for r in results}
     stripe = by_label["Stripe Secret Key"]
     assert stripe["file"] == PATH  # the real path is back
