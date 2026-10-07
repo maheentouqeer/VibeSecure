@@ -193,6 +193,7 @@ def _failure_message(prefix: str, exc: Exception, used_token: bool) -> str:
 
 def _finding_to_dict(f: db.Finding) -> dict:
     return {
+        "id": f.id,
         "category": f.category,
         "label": f.label,
         "file": f.file,
