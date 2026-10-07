@@ -113,6 +113,7 @@ def test_hardening_scanner_flags_client_side_authorization_and_unsafe_upload(tmp
     source.write_text(
         'const isAdmin = await supabase.from("user_roles").select("role");\n'
         'await supabase.storage.from("auction-media").upload(path, file);\n'
+        'accept="image/*"\n'
     )
     findings = scan_hardening(tmp_path)
     categories = {item["category"] for item in findings}
