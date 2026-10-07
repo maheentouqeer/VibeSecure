@@ -528,6 +528,16 @@ function FindingList({
     () => new Map(context.fraud_findings.map((item) => [item.finding_id, item])),
     [context.fraud_findings]
   );
+  const riskBySignature = useMemo(
+    () =>
+      new Map(
+        context.fraud_findings.map((item) => [
+          `${item.category}|${item.label}|${item.file}`,
+          item,
+        ])
+      ),
+    [context.fraud_findings]
+  );
 
   return (
     <section className="glass-panel overflow-hidden">
@@ -551,7 +561,9 @@ function FindingList({
         <div className="divide-y divide-white/6">
           {scan.findings.map((finding) => {
             const open = expanded === finding.id;
-            const risk = riskById.get(finding.id);
+            const risk =
+              riskById.get(finding.id) ??
+              riskBySignature.get(`${finding.category}|${finding.label}|${finding.file}`);
             return (
               <div key={finding.id} className={finding.status === "resolved" ? "finding-row finding-resolved" : "finding-row"}>
                 <button onClick={() => onToggle(finding.id)} className="w-full px-5 py-4 text-left md:px-6">
