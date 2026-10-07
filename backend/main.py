@@ -107,18 +107,22 @@ app = FastAPI(title="Secure-VibeCode API", version="0.1.0", lifespan=lifespan)
 
 # The Next.js frontend (local dev on :3000, or the deployed Vercel domain)
 # lives on a different origin than this API, so the browser needs an
-# explicit CORS allowlist -- ALLOWED_ORIGINS is a comma-separated env var,
-# e.g. "https://secure-vibecode.vercel.app,http://localhost:3000".
+# explicit CORS allowlist -- ALLOWED_ORIGINS is a comma-separated env var.
+# Vercel creates a new preview hostname for each deployment, so this also
+# accepts this project's Vercel preview hostnames without opening CORS to
+# arbitrary origins. Local development remains explicitly allowlisted.
 _default_origins = "http://localhost:3000,http://127.0.0.1:3000"
 _allowed_origins = [
     origin.strip()
     for origin in os.getenv("ALLOWED_ORIGINS", _default_origins).split(",")
     if origin.strip()
 ]
+_allowed_origin_regex = r"^https://vibesecure-[a-z0-9-]+\.vercel\.app$"
 
 app.add_middleware(
     CORSMiddleware,
     allow_origins=_allowed_origins,
+    allow_origin_regex=_allowed_origin_regex,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
