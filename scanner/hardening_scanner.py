@@ -86,7 +86,7 @@ def scan_hardening(repo_path: Path) -> list[dict]:
                     window = text[max(0, match.start() - 1200): min(len(text), match.end() + 900)]
                     # A visible type OR size check is enough to avoid this
                     # conservative finding; stronger validation can be added later.
-                    if re.search(r"file\.type|file\.size|accept\s*=|contentType|allowedTypes|maxSize|sizeLimit", window, re.IGNORECASE):
+                    if re.search(r"file\.type|file\.size|allowedTypes|maxSize|sizeLimit", window, re.IGNORECASE):
                         continue
                 findings.append(
                     {
