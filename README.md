@@ -16,7 +16,7 @@ New in V1:
 
 - **Fraud Impact Analyzer** — maps findings to a conservative attacker action, victim impact, business/fraud impact, risk score, and confidence.
 - **Attack Impact Graph** — visualizes how a security weakness can become a real-world abuse path.
-- **Security Hardening Engine** — exposes 15 important controls and distinguishes `attention`, `no finding`, and `not checked`.
+- **Security Hardening Engine** — exposes 15 important controls and distinguishes `attention` from `no finding` across 15 active hardening detectors.
 - **Fix → Verify loop** — uses the existing deterministic finding fingerprints to confirm when a finding disappears after remediation.
 - **Premium security command center UI** — dark, developer-focused dashboard centered on risk, impact, hardening, and verification.
 - **MIT license** — keeps the repository open for future integrations and the post-hackathon roadmap.
