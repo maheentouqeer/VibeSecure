@@ -201,3 +201,75 @@ export async function createApiKey(label: string, signal?: AbortSignal): Promise
 export async function revokeApiKey(keyId: string, signal?: AbortSignal): Promise<void> {
   await apiFetch<void>("/me/api-keys/" + keyId, { method: "DELETE" }, signal);
 }
+
+
+export interface FraudRiskFinding {
+  finding_id: string;
+  label: string;
+  category: string;
+  file: string;
+  severity: ApiSeverity;
+  risk_score: number;
+  risk_band: "critical" | "high" | "medium" | "low";
+  fraud_category: string;
+  attacker_action: string;
+  victim_impact: string;
+  business_impact: string;
+  attack_path: string[];
+  confidence: number;
+  recommended_fix: string;
+  evidence: {
+    file: string;
+    severity: string;
+    category: string;
+  };
+}
+
+export interface AttackPath {
+  finding_id: string;
+  title: string;
+  risk_score: number;
+  risk_band: "critical" | "high" | "medium" | "low";
+  steps: string[];
+  confidence: number;
+  label: string;
+}
+
+export interface HardeningItem {
+  id: string;
+  title: string;
+  description: string;
+  status: "attention" | "no_finding" | "not_checked";
+  automated: boolean;
+  evidence_count: number;
+  finding_ids: string[];
+}
+
+export interface SecurityContext {
+  overall_risk_score: number;
+  overall_risk_band: "critical" | "high" | "medium" | "low";
+  finding_count: number;
+  open_high_critical: number;
+  verification: {
+    passed: boolean;
+    label: string;
+  };
+  fraud_findings: FraudRiskFinding[];
+  attack_paths: AttackPath[];
+  hardening: {
+    total: number;
+    automated: number;
+    checked: number;
+    attention: number;
+    items: HardeningItem[];
+    note: string;
+  };
+  methodology: string;
+}
+
+export function getSecurityContext(
+  scanId: string,
+  signal?: AbortSignal
+): Promise<SecurityContext> {
+  return apiFetch<SecurityContext>(`/scans/${scanId}/security-context`, {}, signal);
+}
