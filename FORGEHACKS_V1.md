@@ -64,11 +64,11 @@ V1 adds a 15-control hardening view:
 14. Client-side trust
 15. Security audit logging
 
-The UI distinguishes **attention**, **no finding**, and **not checked**.
+The UI now reports all 15 controls through active detectors and distinguishes **attention** from **no finding**.
 
-> A clean result is not presented as proof that the application is secure. A control without an implemented detector is explicitly marked "not checked."
+> A clean result is not presented as proof that the application is secure. "No finding" only means the active detector found no matching risky configuration or code pattern.
 
-V1 also adds conservative source detectors for unsafe HTML insertion, simple SQL string interpolation, weak password hashing primitives, and public environment-variable names that look like secrets.
+V1 also adds conservative source detectors for unsafe HTML insertion, simple SQL string interpolation, weak password hashing primitives, public environment-variable names that look like secrets, explicitly disabled CSRF protection, insecure cookie configuration, disabled rate limiting, and disabled security/audit logging.
 
 ## Fix → Verify loop
 
@@ -99,7 +99,7 @@ VibeSecure existed before ForgeHacks. This submission should describe the existi
 3. Open the highest-risk finding.
 4. Show the attack path.
 5. Show the fraud / impersonation consequence.
-6. Show the hardening controls and any "not checked" gaps.
+6. Show the hardening controls and the risky controls marked **attention**.
 7. Copy the recommended fix into the coding workflow.
 8. Re-scan.
 9. Show the finding becoming **resolved** and the verification state changing.
