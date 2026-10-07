@@ -4,6 +4,7 @@ Two entry points everyone else builds against:
   run_full_scan(target) -> dict
   rescan(target, previous_findings) -> list[dict]
 """
+import os
 from pathlib import Path
 
 from scanner.repo_utils import clone_repo, cleanup, head_commit
@@ -16,8 +17,8 @@ from scanner.hardening_scanner import scan_hardening
 from scanner.supabase_rls_checker import check_rls
 from scanner.live_scanner import scan_live_url
 from agents.triage_agent import triage
-from agents.explainer_agent import explain
-from agents.fixprompt_agent import generate_fix_prompt
+from agents.explainer_agent import explain, _fallback_explain
+from agents.fixprompt_agent import generate_fix_prompt, _fallback_fix_prompt
 
 # Known git hosts get routed straight to a clone. This is not an
 # exhaustive list -- anything else still gets a clone attempt first
@@ -51,6 +52,19 @@ def scan_path(repo_path: Path) -> tuple[list[dict], str]:
     return raw_findings, platform
 
 
+def gemini_finding_limit() -> int:
+    """Maximum findings per scan that receive per-finding Gemini enrichment.
+
+    Triage remains a single optional Gemini call, while explanation/fix work is
+    bounded so a large repository cannot spend minutes on dozens of LLM calls.
+    Deterministic evidence-grounded fallbacks are used for the remaining findings.
+    """
+    try:
+        return max(int(os.getenv("GEMINI_FINDING_LIMIT", "3")), 0)
+    except ValueError:
+        return 3
+
+
 def enrich(raw_findings: list[dict], platform: str) -> list[dict]:
     """Triage, explain, and write a fix prompt for each raw finding.
 
@@ -73,7 +87,9 @@ def enrich(raw_findings: list[dict], platform: str) -> list[dict]:
     }
 
     enriched = []
-    for finding in triage(raw_findings):
+    ai_limit = gemini_finding_limit()
+    triaged_findings = triage(raw_findings)
+    for index, finding in enumerate(triaged_findings):
         key = (finding.get("category"), finding.get("label"), finding.get("file"), finding.get("table"))
         original = evidence_by_key.get(key) or evidence_by_category_file.get(
             (finding.get("category"), finding.get("file"))
@@ -84,8 +100,12 @@ def enrich(raw_findings: list[dict], platform: str) -> list[dict]:
                     finding.setdefault(evidence_key, original[evidence_key])
         finding["platform"] = platform
 
-        explanation = explain(finding, platform=platform)
-        fix_prompt = generate_fix_prompt(finding, platform)
+        if index < ai_limit:
+            explanation = explain(finding, platform=platform)
+            fix_prompt = generate_fix_prompt(finding, platform)
+        else:
+            explanation = _fallback_explain(finding, platform)
+            fix_prompt = _fallback_fix_prompt(finding, platform)
         enriched.append({**finding, **explanation, "fix_prompt": fix_prompt})
     return enriched
 
